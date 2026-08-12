@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Material Calculator V1.3.3</title>
+<title>Material Calculator V1.4.4.3</title>
 <style>
   :root{
     --bg:#f5f7fa; --card:#ffffff; --text:#17202a; --muted:#667085;
@@ -46,6 +46,7 @@
   table{width:100%;border-collapse:collapse;margin-top:8px}
   th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .group-row td{background:var(--soft);font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;font-size:11px}
   .note{font-size:12px;color:var(--muted);line-height:1.45;background:#f8fafc;border:1px dashed var(--line);padding:10px;border-radius:9px;margin-top:12px}
   .preview{position:relative;height:250px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(#fff,#f9fbfd);overflow:hidden;margin-top:12px}
   .track{position:absolute;left:6%;right:6%;height:8px;background:#9aa8b7;border-radius:3px}
@@ -60,8 +61,8 @@
 </head>
 <body>
 <header>
-  <h1>Material Calculator V1.3.3</h1>
-  <p>Assembly-based metal framing calculator</p>
+  <h1>Material Calculator V1.4.4.3</h1>
+  <p>Assembly-based metal framing calculator • Build V1.4</p>
 </header>
 <main>
   <section class="card">
@@ -138,7 +139,7 @@
     </div>
   </section>
 </main>
-<div class="footer">Material Calculator V1.3 • Numbers are estimating aids and should be checked against project drawings, specs, engineering requirements, and manufacturer instructions.</div>
+<div class="footer">Material Calculator V1.4.4 • Numbers are estimating aids and should be checked against project drawings, specs, engineering requirements, and manufacturer instructions.</div>
 <script>
 let walls=[];
 const $=id=>document.getElementById(id);
@@ -186,18 +187,20 @@ function calculate(){
    }).join(''):'<div class="empty">Add walls to see stud quantities by height.</div>';
  }
 
- let studRows='';
+ let studRows='<tr class="group-row"><td colspan="3">Studs by Height</td></tr>';
  Object.values(studGroups).sort((a,b)=>a.height-b.height).forEach(g=>{
    const order=Math.ceil(g.calc*(1+waste));
    studRows+=`<tr>
-     <td>${$('studSize').value} ${$('gauge').value} studs — ${fmtFt(g.height)} wall height @ ${spacing}" O.C.</td>
-     <td>${g.calc} pcs / ${Math.round(g.lf)} LF</td>
-     <td>${order} pcs @ ${fmtFt(g.height)}</td>
+     <td><b>${fmtFt(g.height)} STUDS</b><br><span class="mini">${$('studSize').value} ${$('gauge').value} @ ${spacing}" O.C.</span></td>
+     <td>${g.calc} pcs<br>${Math.round(g.lf)} LF</td>
+     <td><b>${order} pcs</b><br><span class="mini">for ${fmtFt(g.height)} walls</span></td>
    </tr>`;
  });
 
  $('materialBody').innerHTML=studRows+`
+ <tr class="group-row"><td colspan="3">Track</td></tr>
  <tr><td>${$('studSize').value} track — ${$('topTrack').options[$('topTrack').selectedIndex].text} top / ${$('bottomTrack').options[$('bottomTrack').selectedIndex].text} bottom</td><td>${trackLF.toFixed(1)} LF</td><td>${trackPieces} pcs @ ${trackStock}' (${trackOrderLF.toFixed(1)} LF incl. waste)</td></tr>
+ <tr class="group-row"><td colspan="3">Assembly</td></tr>
  <tr><td>Wall assembly area</td><td>${Math.round(totalArea)} SF</td><td>—</td></tr>`;
 
  drawPreview();
