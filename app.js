@@ -12,6 +12,7 @@
     walls: new Map(),
     detectedUnits: null,
     calibration: { activePoint: null, points: [null, null], feetPerUnit: null },
+    toolMode: "wall",
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
     dragging: false,
@@ -342,6 +343,30 @@
     return bestEndpoint || bestOnLine || screenToWorld(screenX, screenY);
   }
 
+  function updateToolUI() {
+    const wallActive = state.toolMode === "wall";
+    $("wallModeBtn").classList.toggle("active-tool", wallActive);
+    $("selectedWallPanel").classList.toggle("tool-priority", wallActive);
+    $("calibrationPanel").classList.toggle("tool-priority", !wallActive);
+
+    // Scale buttons still show their own active point state.
+    if (wallActive) {
+      $("scale1Btn").classList.remove("active-tool");
+      $("scale2Btn").classList.remove("active-tool");
+    }
+  }
+
+  function activateWallMode(scrollPanel = false) {
+    state.toolMode = "wall";
+    state.calibration.activePoint = null;
+    updateToolUI();
+    updateCalibrationUI();
+
+    if (scrollPanel && window.innerWidth <= 980) {
+      $("selectedWallPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   function updateCalibrationUI() {
     const cal = state.calibration;
     const status = $("calibrationStatus");
@@ -352,8 +377,8 @@
     const has2 = !!cal.points[1];
     const hasBoth = has1 && has2;
 
-    $("scale1Btn").classList.toggle("active-tool", cal.activePoint === 0);
-    $("scale2Btn").classList.toggle("active-tool", cal.activePoint === 1);
+    $("scale1Btn").classList.toggle("active-tool", state.toolMode === "scale" && cal.activePoint === 0);
+    $("scale2Btn").classList.toggle("active-tool", state.toolMode === "scale" && cal.activePoint === 1);
     $("scale1Btn").classList.toggle("point-set", has1);
     $("scale2Btn").classList.toggle("point-set", has2);
 
@@ -398,6 +423,7 @@
       badge.classList.remove("calibrated");
     }
 
+    updateToolUI();
     draw();
   }
 
@@ -406,6 +432,7 @@
       alert("Open a DXF drawing first.");
       return;
     }
+    state.toolMode = "scale";
     state.calibration.activePoint =
       state.calibration.activePoint === index ? null : index;
     selectSegment(null);
@@ -436,6 +463,7 @@
     }
     state.calibration.feetPerUnit = actualFeet / raw;
     state.calibration.activePoint = null;
+    state.toolMode = "wall";
     recalcAllWallsForUnits();
     updateCalibrationUI();
   }
@@ -444,6 +472,7 @@
     state.calibration.activePoint = null;
     state.calibration.points = [null, null];
     state.calibration.feetPerUnit = null;
+    state.toolMode = "wall";
     recalcAllWallsForUnits();
     updateCalibrationUI();
   }
@@ -529,8 +558,11 @@
       draw();
       return;
     }
+    state.toolMode = "wall";
+    state.calibration.activePoint = null;
     $("wallForm").classList.remove("hidden");
     $("selectionEmpty").classList.add("hidden");
+    updateToolUI();
 
     const wall = state.walls.get(id);
     if (wall) {
@@ -576,7 +608,12 @@
       const d = pointSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y);
       if (d < bestD) { bestD = d; best = s; }
     }
-    if (best) selectSegment(best.id);
+    if (best) {
+      selectSegment(best.id);
+      if (window.innerWidth <= 980) {
+        $("selectedWallPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
   }
 
   function refreshTables() {
@@ -759,6 +796,7 @@
     state.segments = parsed.segments;
     state.detectedUnits = parsed.detectedUnits;
     state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
+    state.toolMode = "wall";
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
     state.selectedId = null;
@@ -786,6 +824,7 @@
     updateCalibrationUI();
   });
 
+  $("wallModeBtn").addEventListener("click", () => activateWallMode(true));
   $("scale1Btn").addEventListener("click", () => activateScalePoint(0));
   $("scale2Btn").addEventListener("click", () => activateScalePoint(1));
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);

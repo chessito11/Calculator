@@ -215,3 +215,24 @@ tbody tr:hover { background: #212630; }
   opacity: .45;
   cursor: not-allowed;
 }
+
+
+/* V1.4 tool switching: WALL stays fully available alongside Scale 1 / Scale 2 */
+.side-panel {
+  position: relative;
+}
+.tool-priority {
+  order: -10;
+}
+#selectedWallPanel {
+  scroll-margin-top: 10px;
+}
+#selectedWallPanel.tool-priority {
+  border-color: #3f5873;
+}
+#wallModeBtn.active-tool {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #17130a;
+  font-weight: 800;
+}

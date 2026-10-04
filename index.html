@@ -17,6 +17,7 @@
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
       <input id="dxfFile" type="file" hidden>
       <button id="fitBtn" class="button">Fit Drawing</button>
+      <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
       <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
       <button id="exportCsvBtn" class="button">Export CSV</button>
@@ -57,7 +58,7 @@
     </section>
 
     <aside class="side-panel">
-      <section class="panel calibration-panel">
+      <section id="calibrationPanel" class="panel calibration-panel">
         <div class="panel-heading">
           <h2>Scale Calibration</h2>
           <button id="resetCalibrationBtn" class="text-button hidden" type="button">Reset</button>
@@ -89,7 +90,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="selectedWallPanel" class="panel tool-priority">
         <h2>Selected Wall</h2>
         <div id="selectionEmpty" class="muted">Select a line in the drawing.</div>
 
