@@ -11,6 +11,7 @@
     selectedId: null,
     walls: new Map(),
     detectedUnits: null,
+    calibration: { active: false, points: [], feetPerUnit: null },
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
     dragging: false,
@@ -246,6 +247,187 @@
         ctx.fillText(text, mx, my);
       }
     }
+
+    drawCalibrationOverlay();
+  }
+
+  function drawCalibrationOverlay() {
+    const pts = state.calibration.points;
+    if (!pts.length) return;
+
+    const screens = pts.map(p => worldToScreen(p.x, p.y));
+    ctx.save();
+    ctx.strokeStyle = "#50e3c2";
+    ctx.fillStyle = "#50e3c2";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 5]);
+
+    if (screens.length === 2) {
+      ctx.beginPath();
+      ctx.moveTo(screens[0].x, screens[0].y);
+      ctx.lineTo(screens[1].x, screens[1].y);
+      ctx.stroke();
+    }
+
+    ctx.setLineDash([]);
+    screens.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#081310";
+      ctx.font = "bold 10px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(i + 1), p.x, p.y);
+      ctx.fillStyle = "#50e3c2";
+    });
+    ctx.restore();
+  }
+
+  function baseFeetPerUnit() {
+    return unitToFeetFactor(currentUnit());
+  }
+
+  function activeFeetPerUnit() {
+    return state.calibration.feetPerUnit || baseFeetPerUnit();
+  }
+
+  function rawPointDistance(a, b) {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function nearestCalibrationPoint(screenX, screenY) {
+    let bestEndpoint = null;
+    let endpointDistance = 18;
+    let bestOnLine = null;
+    let lineDistance = 16;
+
+    for (const s of state.segments) {
+      const a = worldToScreen(s.x1, s.y1);
+      const b = worldToScreen(s.x2, s.y2);
+
+      const da = Math.hypot(screenX - a.x, screenY - a.y);
+      if (da < endpointDistance) {
+        endpointDistance = da;
+        bestEndpoint = { x: s.x1, y: s.y1 };
+      }
+      const db = Math.hypot(screenX - b.x, screenY - b.y);
+      if (db < endpointDistance) {
+        endpointDistance = db;
+        bestEndpoint = { x: s.x2, y: s.y2 };
+      }
+
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const len2 = abx * abx + aby * aby;
+      if (len2 > 0) {
+        let t = ((screenX - a.x) * abx + (screenY - a.y) * aby) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const px = a.x + t * abx, py = a.y + t * aby;
+        const d = Math.hypot(screenX - px, screenY - py);
+        if (d < lineDistance) {
+          lineDistance = d;
+          bestOnLine = {
+            x: s.x1 + t * (s.x2 - s.x1),
+            y: s.y1 + t * (s.y2 - s.y1)
+          };
+        }
+      }
+    }
+
+    return bestEndpoint || bestOnLine || screenToWorld(screenX, screenY);
+  }
+
+  function updateCalibrationUI() {
+    const cal = state.calibration;
+    const status = $("calibrationStatus");
+    const form = $("calibrationForm");
+    const reset = $("resetCalibrationBtn");
+    const badge = $("scaleBadge");
+    const hint = $("hintbar");
+
+    if (cal.active) {
+      $("calibrateBtn").textContent = "Calibrating…";
+      $("calibrateBtn").classList.add("active-tool");
+      if (cal.points.length === 0) {
+        status.textContent = "Tap the first point of a known dimension.";
+        hint.textContent = "CALIBRATION: Tap point 1. You can still drag to pan or pinch to zoom.";
+        form.classList.add("hidden");
+      } else if (cal.points.length === 1) {
+        status.textContent = "Point 1 selected. Tap the second point.";
+        hint.textContent = "CALIBRATION: Tap point 2 of the known dimension.";
+        form.classList.add("hidden");
+      } else {
+        const raw = rawPointDistance(cal.points[0], cal.points[1]);
+        const measured = raw * baseFeetPerUnit();
+        $("calibrationMeasured").textContent = formatFeetInches(measured);
+        status.textContent = "Enter the real distance between the two selected points.";
+        hint.textContent = "Enter the known distance and press Apply Calibration.";
+        form.classList.remove("hidden");
+      }
+    } else {
+      $("calibrateBtn").textContent = "Calibrate Scale";
+      $("calibrateBtn").classList.remove("active-tool");
+      form.classList.add("hidden");
+      hint.textContent = "Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.";
+      if (cal.feetPerUnit) {
+        status.textContent = "Scale is calibrated from a known dimension. Wall lengths use the calibrated scale.";
+        reset.classList.remove("hidden");
+        badge.textContent = "Scale: Calibrated";
+        badge.classList.add("calibrated");
+      } else {
+        status.textContent = "Using DXF units. For converted drawings, calibrate from a known dimension before takeoff.";
+        reset.classList.add("hidden");
+        badge.textContent = "Scale: DXF units";
+        badge.classList.remove("calibrated");
+      }
+    }
+    draw();
+  }
+
+  function startCalibration() {
+    if (!state.segments.length) {
+      alert("Open a DXF drawing first.");
+      return;
+    }
+    state.calibration.active = true;
+    state.calibration.points = [];
+    selectSegment(null);
+    updateCalibrationUI();
+  }
+
+  function cancelCalibration() {
+    state.calibration.active = false;
+    state.calibration.points = [];
+    updateCalibrationUI();
+  }
+
+  function applyCalibration() {
+    if (state.calibration.points.length !== 2) return;
+    const feet = Math.max(0, Number($("calibrationFeet").value) || 0);
+    const inches = Math.max(0, Number($("calibrationInches").value) || 0);
+    const actualFeet = feet + inches / 12;
+    if (!(actualFeet > 0)) {
+      alert("Enter an actual distance greater than zero.");
+      return;
+    }
+    const raw = rawPointDistance(state.calibration.points[0], state.calibration.points[1]);
+    if (!(raw > 0)) {
+      alert("The two calibration points are too close together.");
+      return;
+    }
+    state.calibration.feetPerUnit = actualFeet / raw;
+    state.calibration.active = false;
+    state.calibration.points = [];
+    recalcAllWallsForUnits();
+    updateCalibrationUI();
+  }
+
+  function resetCalibration() {
+    state.calibration.active = false;
+    state.calibration.points = [];
+    state.calibration.feetPerUnit = null;
+    recalcAllWallsForUnits();
+    updateCalibrationUI();
   }
 
   function currentUnit() {
@@ -265,7 +447,7 @@
 
   function segmentLengthFeet(segment) {
     const raw = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-    return raw * unitToFeetFactor(currentUnit());
+    return raw * activeFeetPerUnit();
   }
 
   function formatFeetInches(feet) {
@@ -558,6 +740,7 @@
     state.fileName = file.name;
     state.segments = parsed.segments;
     state.detectedUnits = parsed.detectedUnits;
+    state.calibration = { active: false, points: [], feetPerUnit: null };
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
     state.selectedId = null;
@@ -569,12 +752,29 @@
 
     refreshTables();
     selectSegment(null);
+    updateCalibrationUI();
     fitDrawing();
   });
 
   $("fitBtn").addEventListener("click", fitDrawing);
   $("exportCsvBtn").addEventListener("click", exportCSV);
-  $("unitSelect").addEventListener("change", recalcAllWallsForUnits);
+  $("unitSelect").addEventListener("change", () => {
+    if (state.calibration.feetPerUnit) {
+      state.calibration.feetPerUnit = null;
+      state.calibration.points = [];
+      state.calibration.active = false;
+    }
+    recalcAllWallsForUnits();
+    updateCalibrationUI();
+  });
+
+  $("calibrateBtn").addEventListener("click", () => {
+    if (state.calibration.active) cancelCalibration();
+    else startCalibration();
+  });
+  $("applyCalibrationBtn").addEventListener("click", applyCalibration);
+  $("cancelCalibrationBtn").addEventListener("click", cancelCalibration);
+  $("resetCalibrationBtn").addEventListener("click", resetCalibration);
 
   $("wallForm").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -665,7 +865,15 @@
     state.pointers.delete(e.pointerId);
 
     if (hadOne && !state.moved) {
-      pickSegment(e.clientX - rect.left, e.clientY - rect.top);
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (state.calibration.active && state.calibration.points.length < 2) {
+        const p = nearestCalibrationPoint(sx, sy);
+        state.calibration.points.push(p);
+        updateCalibrationUI();
+      } else if (!state.calibration.active) {
+        pickSegment(sx, sy);
+      }
     }
 
     if (state.pointers.size < 2) {
@@ -689,4 +897,5 @@
   window.addEventListener("resize", resizeCanvas);
   resizeCanvas();
   refreshTables();
+  updateCalibrationUI();
 })();

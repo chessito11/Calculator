@@ -17,6 +17,7 @@
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
       <input id="dxfFile" type="file" hidden>
       <button id="fitBtn" class="button">Fit Drawing</button>
+      <button id="calibrateBtn" class="button">Calibrate Scale</button>
       <button id="exportCsvBtn" class="button">Export CSV</button>
     </div>
   </header>
@@ -36,6 +37,7 @@
               <option value="m">Meters</option>
             </select>
           </label>
+          <span id="scaleBadge" class="badge">Scale: DXF units</span>
           <span id="wallCountBadge" class="badge">0 walls</span>
         </div>
       </div>
@@ -48,12 +50,40 @@
         </div>
       </div>
 
-      <div class="hintbar">
+      <div id="hintbar" class="hintbar">
         Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.
       </div>
     </section>
 
     <aside class="side-panel">
+      <section class="panel calibration-panel">
+        <div class="panel-heading">
+          <h2>Scale Calibration</h2>
+          <button id="resetCalibrationBtn" class="text-button hidden" type="button">Reset</button>
+        </div>
+        <div id="calibrationStatus" class="muted calibration-copy">
+          Open a DXF, then press Calibrate Scale and tap two points with a known real-world distance.
+        </div>
+        <div id="calibrationForm" class="hidden calibration-form">
+          <div class="calibration-measured">
+            <span>Current measured distance</span>
+            <strong id="calibrationMeasured">—</strong>
+          </div>
+          <div class="field-row">
+            <label>Actual feet
+              <input id="calibrationFeet" type="number" min="0" step="1" inputmode="numeric" value="20">
+            </label>
+            <label>Actual inches
+              <input id="calibrationInches" type="number" min="0" step="0.0625" inputmode="decimal" value="0">
+            </label>
+          </div>
+          <div class="form-actions">
+            <button id="applyCalibrationBtn" class="button primary grow" type="button">Apply Calibration</button>
+            <button id="cancelCalibrationBtn" class="button" type="button">Cancel</button>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <h2>Selected Wall</h2>
         <div id="selectionEmpty" class="muted">Select a line in the drawing.</div>
