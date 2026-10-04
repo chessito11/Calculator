@@ -236,3 +236,46 @@ tbody tr:hover { background: #212630; }
   color: #17130a;
   font-weight: 800;
 }
+
+
+/* V1.5 manual corner tracing + reusable wall types */
+#traceWallsBtn.active-tool {
+  background: #ff9f43;
+  border-color: #ff9f43;
+  color: #1b1005;
+  font-weight: 800;
+}
+
+.type-help {
+  margin: 8px 0 10px;
+  font-size: 12px;
+}
+
+.type-actions {
+  margin-top: 9px;
+}
+
+.type-card {
+  cursor: pointer;
+}
+
+.type-card:hover {
+  border-color: #596474;
+}
+
+.wall-type-total .summary-title {
+  display: flex;
+  justify-content: space-between;
+}
+
+#activeWallTypeSelect {
+  min-width: 105px;
+  max-width: 150px;
+}
+
+@media (max-width: 700px) {
+  #activeWallTypeSelect {
+    min-width: 95px;
+    max-width: 125px;
+  }
+}

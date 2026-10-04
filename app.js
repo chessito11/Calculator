@@ -5,6 +5,26 @@
   const canvas = $("dxfCanvas");
   const ctx = canvas.getContext("2d");
 
+  const WALL_TYPE_STORAGE_KEY = "atlasTakeoffWallTypesV1";
+
+  function loadWallTypes() {
+    try {
+      const raw = localStorage.getItem(WALL_TYPE_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function persistWallTypes() {
+    try {
+      localStorage.setItem(WALL_TYPE_STORAGE_KEY, JSON.stringify(state.wallTypes));
+    } catch (err) {
+      // The app still works if private browsing/storage blocks persistence.
+    }
+  }
+
   const state = {
     fileName: "",
     segments: [],
@@ -13,6 +33,9 @@
     detectedUnits: null,
     calibration: { activePoint: null, points: [null, null], feetPerUnit: null },
     toolMode: "wall",
+    wallTypes: loadWallTypes(),
+    activeWallType: "",
+    trace: { lastPoint: null },
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
     dragging: false,
@@ -250,6 +273,26 @@
     }
 
     drawCalibrationOverlay();
+    drawTraceOverlay();
+  }
+
+  function drawTraceOverlay() {
+    if (state.toolMode !== "trace" || !state.trace.lastPoint) return;
+    const p = worldToScreen(state.trace.lastPoint.x, state.trace.lastPoint.y);
+    ctx.save();
+    ctx.fillStyle = "#ff9f43";
+    ctx.strokeStyle = "#11151b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#11151b";
+    ctx.font = "bold 10px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("•", p.x, p.y);
+    ctx.restore();
   }
 
   function drawCalibrationOverlay() {
@@ -343,10 +386,231 @@
     return bestEndpoint || bestOnLine || screenToWorld(screenX, screenY);
   }
 
+  function nearestWallEndpoint(screenX, screenY) {
+    let best = null;
+    let bestDistance = 24;
+
+    for (const s of state.segments) {
+      if (s.sourceType === "MANUAL_WALL") continue;
+      const candidates = [
+        { x: s.x1, y: s.y1 },
+        { x: s.x2, y: s.y2 }
+      ];
+      for (const p of candidates) {
+        const sp = worldToScreen(p.x, p.y);
+        const d = Math.hypot(screenX - sp.x, screenY - sp.y);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = p;
+        }
+      }
+    }
+    return best;
+  }
+
+  function wallTemplateFromForm() {
+    return {
+      height: Number($("wallHeight").value),
+      studSize: $("studSize").value,
+      gauge: $("gauge").value,
+      spacing: Number($("spacing").value),
+      topTrack: $("topTrack").value,
+      bottomTrack: $("bottomTrack").value,
+      doubleEnds: $("doubleEnds").checked,
+      wastePercent: Number($("wastePercent").value) || 0
+    };
+  }
+
+  function applyWallTemplate(template) {
+    if (!template) return;
+    $("wallHeight").value = String(template.height ?? 10);
+    $("studSize").value = template.studSize || '3-5/8"';
+    $("gauge").value = template.gauge || "20ga";
+    $("spacing").value = String(template.spacing ?? 16);
+    $("topTrack").value = template.topTrack || "Standard";
+    $("bottomTrack").value = template.bottomTrack || "Standard";
+    $("doubleEnds").checked = !!template.doubleEnds;
+    $("wastePercent").value = Number(template.wastePercent ?? 0);
+    updateCalcPreview();
+  }
+
+  function setActiveWallType(name, applyToCurrent = false) {
+    state.activeWallType = name && state.wallTypes[name] ? name : "";
+    $("activeWallTypeSelect").value = state.activeWallType;
+
+    if (applyToCurrent && state.selectedId) {
+      $("wallTypeSelect").value = state.activeWallType;
+      if (state.activeWallType) applyWallTemplate(state.wallTypes[state.activeWallType]);
+    }
+  }
+
+  function refreshWallTypeUI() {
+    const names = Object.keys(state.wallTypes).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+    const selects = [$("activeWallTypeSelect"), $("wallTypeSelect")];
+
+    for (const select of selects) {
+      if (!select) continue;
+      const current = select.id === "activeWallTypeSelect"
+        ? state.activeWallType
+        : select.value;
+      select.innerHTML = '<option value="">Unassigned</option>';
+      for (const name of names) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      }
+      select.value = names.includes(current) ? current : "";
+    }
+
+    $("wallTypeCountBadge").textContent = `${names.length} type${names.length === 1 ? "" : "s"}`;
+
+    const list = $("wallTypeLibraryList");
+    if (!names.length) {
+      list.className = "summary-list muted";
+      list.textContent = "No wall types saved yet.";
+      return;
+    }
+
+    list.className = "summary-list";
+    list.innerHTML = "";
+    for (const name of names) {
+      const t = state.wallTypes[name];
+      const group = document.createElement("div");
+      group.className = "summary-group type-card";
+      group.innerHTML = `
+        <div class="summary-title">${escapeHtml(name)}</div>
+        <div class="summary-item"><span>Stud</span><span>${escapeHtml(t.studSize)} ${escapeHtml(t.gauge)} @ ${t.spacing}" O.C.</span></div>
+        <div class="summary-item"><span>Height</span><span>${escapeHtml(String(t.height))}'</span></div>
+        <div class="summary-item"><span>Track</span><span>${escapeHtml(t.bottomTrack)} / ${escapeHtml(t.topTrack)}</span></div>`;
+      group.addEventListener("click", () => {
+        $("wallTypeName").value = name;
+        setActiveWallType(name, !!state.selectedId);
+        if (state.selectedId) {
+          $("wallTypeSelect").value = name;
+          applyWallTemplate(t);
+        }
+      });
+      list.appendChild(group);
+    }
+  }
+
+  function saveWallTypeFromForm() {
+    const name = $("wallTypeName").value.trim();
+    if (!name) {
+      alert("Enter a wall type name first.");
+      return;
+    }
+    state.wallTypes[name] = wallTemplateFromForm();
+    persistWallTypes();
+    state.activeWallType = name;
+    refreshWallTypeUI();
+    setActiveWallType(name, !!state.selectedId);
+    if (state.selectedId) $("wallTypeSelect").value = name;
+  }
+
+  function deleteWallType() {
+    const name = $("wallTypeName").value.trim() || state.activeWallType;
+    if (!name || !state.wallTypes[name]) {
+      alert("Choose a saved wall type first.");
+      return;
+    }
+    if (!confirm(`Delete wall type ${name}? Existing walls keep their saved takeoff data.`)) return;
+    delete state.wallTypes[name];
+    if (state.activeWallType === name) state.activeWallType = "";
+    persistWallTypes();
+    $("wallTypeName").value = "";
+    refreshWallTypeUI();
+  }
+
+  function nextManualSegmentId() {
+    let max = 0;
+    for (const s of state.segments) max = Math.max(max, Number(s.id) || 0);
+    return max + 1;
+  }
+
+  function updateTraceUI() {
+    $("traceWallsBtn").classList.toggle("active-tool", state.toolMode === "trace");
+    if (state.toolMode !== "trace") return;
+
+    const typeText = state.activeWallType ? ` — active type: ${state.activeWallType}` : " — active type: Unassigned";
+    if (!state.trace.lastPoint) {
+      $("hintbar").textContent = `TRACE WALLS: Tap the first corner. Only DXF endpoints are used${typeText}.`;
+    } else {
+      $("hintbar").textContent = `TRACE WALLS: Tap the next corner to create a wall. Keep tapping corner-to-corner${typeText}.`;
+    }
+  }
+
+  function activateTraceMode() {
+    if (!state.segments.length) {
+      alert("Open a DXF drawing first.");
+      return;
+    }
+    if (state.toolMode === "trace") {
+      state.trace.lastPoint = null;
+      activateWallMode(false);
+      return;
+    }
+    state.toolMode = "trace";
+    state.calibration.activePoint = null;
+    state.trace.lastPoint = null;
+    selectSegment(null, { preserveMode: true });
+    updateToolUI();
+    updateCalibrationUI();
+    updateTraceUI();
+    draw();
+  }
+
+  function traceWallPoint(screenX, screenY) {
+    const point = nearestWallEndpoint(screenX, screenY);
+    if (!point) {
+      $("hintbar").textContent = "TRACE WALLS: No DXF corner found there. Tap closer to the corner/end point you want.";
+      return;
+    }
+
+    if (!state.trace.lastPoint) {
+      state.trace.lastPoint = { x: point.x, y: point.y };
+      updateTraceUI();
+      draw();
+      return;
+    }
+
+    const a = state.trace.lastPoint;
+    const b = point;
+    if (rawPointDistance(a, b) < 1e-9) {
+      $("hintbar").textContent = "TRACE WALLS: Choose a different corner for the next wall.";
+      return;
+    }
+
+    const seg = {
+      id: nextManualSegmentId(),
+      x1: a.x, y1: a.y,
+      x2: b.x, y2: b.y,
+      sourceType: "MANUAL_WALL"
+    };
+    state.segments.push(seg);
+    state.trace.lastPoint = { x: b.x, y: b.y };
+
+    selectSegment(seg.id, { preserveMode: true });
+    if (state.activeWallType) {
+      $("wallTypeSelect").value = state.activeWallType;
+      applyWallTemplate(state.wallTypes[state.activeWallType]);
+    } else {
+      $("wallTypeSelect").value = "";
+    }
+    saveWallFromForm({ preserveMode: true });
+    state.toolMode = "trace";
+    updateToolUI();
+    updateTraceUI();
+    draw();
+  }
+
   function updateToolUI() {
     const wallActive = state.toolMode === "wall";
+    const traceActive = state.toolMode === "trace";
     $("wallModeBtn").classList.toggle("active-tool", wallActive);
-    $("selectedWallPanel").classList.toggle("tool-priority", wallActive);
+    $("traceWallsBtn").classList.toggle("active-tool", traceActive);
+    $("selectedWallPanel").classList.toggle("tool-priority", wallActive || traceActive);
     $("calibrationPanel").classList.toggle("tool-priority", !wallActive);
 
     // Scale buttons still show their own active point state.
@@ -358,6 +622,7 @@
 
   function activateWallMode(scrollPanel = false) {
     state.toolMode = "wall";
+    state.trace.lastPoint = null;
     state.calibration.activePoint = null;
     updateToolUI();
     updateCalibrationUI();
@@ -433,6 +698,7 @@
       return;
     }
     state.toolMode = "scale";
+    state.trace.lastPoint = null;
     state.calibration.activePoint =
       state.calibration.activePoint === index ? null : index;
     selectSegment(null);
@@ -549,7 +815,7 @@
     return `W-${String(max + 1).padStart(3, "0")}`;
   }
 
-  function selectSegment(id) {
+  function selectSegment(id, options = {}) {
     state.selectedId = id;
     const seg = state.segments.find(s => s.id === id);
     if (!seg) {
@@ -558,8 +824,11 @@
       draw();
       return;
     }
-    state.toolMode = "wall";
-    state.calibration.activePoint = null;
+    if (!options.preserveMode) {
+      state.toolMode = "wall";
+      state.trace.lastPoint = null;
+      state.calibration.activePoint = null;
+    }
     $("wallForm").classList.remove("hidden");
     $("selectionEmpty").classList.add("hidden");
     updateToolUI();
@@ -567,6 +836,7 @@
     const wall = state.walls.get(id);
     if (wall) {
       $("wallNumber").value = wall.wallNumber;
+      $("wallTypeSelect").value = wall.wallType || "";
       $("wallHeight").value = String(wall.height);
       $("studSize").value = wall.studSize;
       $("gauge").value = wall.gauge;
@@ -577,6 +847,7 @@
       $("wastePercent").value = wall.wastePercent;
     } else {
       $("wallNumber").value = nextWallNumber();
+      $("wallTypeSelect").value = state.activeWallType || "";
       $("wallHeight").value = "10";
       $("studSize").value = '3-5/8"';
       $("gauge").value = "20ga";
@@ -585,6 +856,9 @@
       $("bottomTrack").value = "Standard";
       $("doubleEnds").checked = false;
       $("wastePercent").value = "0";
+      if (state.activeWallType && state.wallTypes[state.activeWallType]) {
+        applyWallTemplate(state.wallTypes[state.activeWallType]);
+      }
     }
     updateCalcPreview();
     draw();
@@ -620,11 +894,17 @@
     const tbody = $("wallTable").querySelector("tbody");
     tbody.innerHTML = "";
 
-    const walls = [...state.walls.values()].sort((a,b) => a.wallNumber.localeCompare(b.wallNumber, undefined, {numeric:true}));
+    const walls = [...state.walls.values()].sort((a,b) => {
+      const ta = a.wallType || "ZZZ-Unassigned";
+      const tb = b.wallType || "ZZZ-Unassigned";
+      return ta.localeCompare(tb, undefined, {numeric:true}) ||
+        a.wallNumber.localeCompare(b.wallNumber, undefined, {numeric:true});
+    });
     for (const w of walls) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${escapeHtml(w.wallNumber)}</td>
+        <td>${escapeHtml(w.wallType || "—")}</td>
         <td>${escapeHtml(formatFeetInches(w.lengthFt))}</td>
         <td>${escapeHtml(String(w.height))}'</td>
         <td>${escapeHtml(w.studSize)} ${escapeHtml(w.gauge)}</td>
@@ -634,7 +914,48 @@
     }
 
     $("wallCountBadge").textContent = `${walls.length} wall${walls.length === 1 ? "" : "s"}`;
+    refreshWallTypeTotals(walls);
     refreshMaterialSummary(walls);
+  }
+
+  function refreshWallTypeTotals(walls) {
+    const el = $("wallTypeTotals");
+    if (!walls.length) {
+      el.className = "summary-list muted";
+      el.textContent = "No walls saved yet.";
+      return;
+    }
+
+    const groups = new Map();
+    for (const w of walls) {
+      const name = w.wallType || "Unassigned";
+      if (!groups.has(name)) {
+        groups.set(name, { count: 0, lengthFt: 0, studs: 0, topFt: 0, bottomFt: 0 });
+      }
+      const g = groups.get(name);
+      g.count += 1;
+      g.lengthFt += w.lengthFt;
+      g.studs += w.studQty;
+      if (w.topTrack !== "None") g.topFt += w.trackFt;
+      if (w.bottomTrack !== "None") g.bottomFt += w.trackFt;
+    }
+
+    el.className = "summary-list";
+    el.innerHTML = "";
+    const names = [...groups.keys()].sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+    for (const name of names) {
+      const g = groups.get(name);
+      const group = document.createElement("div");
+      group.className = "summary-group wall-type-total";
+      group.innerHTML = `
+        <div class="summary-title">${escapeHtml(name)}</div>
+        <div class="summary-item"><span>Walls</span><span>${g.count}</span></div>
+        <div class="summary-item"><span>Total wall length</span><span>${formatFeetInches(g.lengthFt)} (${g.lengthFt.toFixed(2)} LF)</span></div>
+        <div class="summary-item"><span>Total studs</span><span>${g.studs} pcs</span></div>
+        <div class="summary-item"><span>Top track</span><span>${g.topFt.toFixed(2)} LF</span></div>
+        <div class="summary-item"><span>Bottom track</span><span>${g.bottomFt.toFixed(2)} LF</span></div>`;
+      el.appendChild(group);
+    }
   }
 
   function refreshMaterialSummary(walls) {
@@ -688,7 +1009,7 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   }
 
-  function saveWallFromForm() {
+  function saveWallFromForm(options = {}) {
     const s = state.segments.find(x => x.id === state.selectedId);
     if (!s) return;
     const c = calcWall(s);
@@ -704,6 +1025,7 @@
     state.walls.set(s.id, {
       segmentId: s.id,
       wallNumber,
+      wallType: $("wallTypeSelect").value || "",
       lengthFt: c.lengthFt,
       height: Number($("wallHeight").value),
       studSize: $("studSize").value,
@@ -718,6 +1040,7 @@
     });
 
     refreshTables();
+    if (!options.preserveMode) state.toolMode = "wall";
     draw();
   }
 
@@ -754,12 +1077,12 @@
       return;
     }
     const rows = [[
-      "Wall Number","Length (ft)","Length (ft-in)","Height (ft)","Stud Size","Gauge",
+      "Wall Number","Wall Type","Length (ft)","Length (ft-in)","Height (ft)","Stud Size","Gauge",
       "Spacing (in OC)","Stud Qty","Top Track","Bottom Track","Track LF","Double Ends","Waste %"
     ]];
     for (const w of walls) {
       rows.push([
-        w.wallNumber, w.lengthFt.toFixed(4), formatFeetInches(w.lengthFt), w.height,
+        w.wallNumber, w.wallType || "", w.lengthFt.toFixed(4), formatFeetInches(w.lengthFt), w.height,
         w.studSize, w.gauge, w.spacing, w.studQty, w.topTrack, w.bottomTrack,
         w.trackFt.toFixed(2), w.doubleEnds ? "Yes" : "No", w.wastePercent
       ]);
@@ -797,6 +1120,7 @@
     state.detectedUnits = parsed.detectedUnits;
     state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
     state.toolMode = "wall";
+    state.trace.lastPoint = null;
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
     state.selectedId = null;
@@ -825,11 +1149,30 @@
   });
 
   $("wallModeBtn").addEventListener("click", () => activateWallMode(true));
+  $("traceWallsBtn").addEventListener("click", activateTraceMode);
   $("scale1Btn").addEventListener("click", () => activateScalePoint(0));
   $("scale2Btn").addEventListener("click", () => activateScalePoint(1));
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);
   $("cancelCalibrationBtn").addEventListener("click", cancelCalibration);
   $("resetCalibrationBtn").addEventListener("click", resetCalibration);
+
+  $("activeWallTypeSelect").addEventListener("change", (e) => {
+    setActiveWallType(e.target.value, false);
+    updateTraceUI();
+  });
+
+  $("wallTypeSelect").addEventListener("change", (e) => {
+    const name = e.target.value;
+    if (name && state.wallTypes[name]) {
+      state.activeWallType = name;
+      $("activeWallTypeSelect").value = name;
+      $("wallTypeName").value = name;
+      applyWallTemplate(state.wallTypes[name]);
+    }
+  });
+
+  $("saveWallTypeBtn").addEventListener("click", saveWallTypeFromForm);
+  $("deleteWallTypeBtn").addEventListener("click", deleteWallType);
 
   $("wallForm").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -843,15 +1186,26 @@
 
   $("deleteWallBtn").addEventListener("click", () => {
     if (!state.selectedId) return;
-    state.walls.delete(state.selectedId);
-    refreshTables();
-    selectSegment(state.selectedId);
+    const deletingId = state.selectedId;
+    const seg = state.segments.find(s => s.id === deletingId);
+    state.walls.delete(deletingId);
+    if (seg && seg.sourceType === "MANUAL_WALL") {
+      state.segments = state.segments.filter(s => s.id !== deletingId);
+      state.selectedId = null;
+      refreshTables();
+      selectSegment(null);
+    } else {
+      refreshTables();
+      selectSegment(deletingId);
+    }
   });
 
   $("clearWallsBtn").addEventListener("click", () => {
     if (!state.walls.size) return;
     if (!confirm("Clear all saved wall takeoff items?")) return;
     state.walls.clear();
+    state.segments = state.segments.filter(s => s.sourceType !== "MANUAL_WALL");
+    state.trace.lastPoint = null;
     refreshTables();
     if (state.selectedId) selectSegment(state.selectedId);
     draw();
@@ -931,6 +1285,8 @@
         state.calibration.feetPerUnit = null;
         recalcAllWallsForUnits();
         updateCalibrationUI();
+      } else if (state.toolMode === "trace") {
+        traceWallPoint(sx, sy);
       } else {
         pickSegment(sx, sy);
       }
@@ -956,6 +1312,8 @@
 
   window.addEventListener("resize", resizeCanvas);
   resizeCanvas();
+  refreshWallTypeUI();
   refreshTables();
   updateCalibrationUI();
+  updateTraceUI();
 })();

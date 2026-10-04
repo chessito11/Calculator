@@ -18,6 +18,7 @@
       <input id="dxfFile" type="file" hidden>
       <button id="fitBtn" class="button">Fit Drawing</button>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
+      <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
       <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
       <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
       <button id="exportCsvBtn" class="button">Export CSV</button>
@@ -37,6 +38,11 @@
               <option value="mm">Millimeters</option>
               <option value="cm">Centimeters</option>
               <option value="m">Meters</option>
+            </select>
+          </label>
+          <label>Active type
+            <select id="activeWallTypeSelect">
+              <option value="">Unassigned</option>
             </select>
           </label>
           <span id="scaleBadge" class="badge">Scale: DXF units</span>
@@ -103,6 +109,12 @@
               <input id="wallLength" type="text" readonly>
             </label>
           </div>
+
+          <label>Wall Type
+            <select id="wallTypeSelect">
+              <option value="">Unassigned</option>
+            </select>
+          </label>
 
           <div class="field-row">
             <label>Height
@@ -188,6 +200,25 @@
         </form>
       </section>
 
+
+      <section id="wallTypePanel" class="panel">
+        <div class="panel-heading">
+          <h2>Wall Type Library</h2>
+          <span id="wallTypeCountBadge" class="badge">0 types</span>
+        </div>
+        <div class="muted type-help">
+          Save a framing assembly once, then reuse it while selecting or tracing walls.
+        </div>
+        <label>Type name
+          <input id="wallTypeName" type="text" autocomplete="off" placeholder="Example: W1, W2, Shaft Wall">
+        </label>
+        <div class="form-actions type-actions">
+          <button id="saveWallTypeBtn" class="button primary grow" type="button">Save / Update Type</button>
+          <button id="deleteWallTypeBtn" class="button danger" type="button">Delete Type</button>
+        </div>
+        <div id="wallTypeLibraryList" class="summary-list muted">No wall types saved yet.</div>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <h2>Wall Takeoff</h2>
@@ -198,6 +229,7 @@
             <thead>
               <tr>
                 <th>Wall</th>
+                <th>Type</th>
                 <th>Length</th>
                 <th>Ht.</th>
                 <th>Stud</th>
@@ -207,6 +239,12 @@
             <tbody></tbody>
           </table>
         </div>
+      </section>
+
+
+      <section class="panel">
+        <h2>Wall Type Totals</h2>
+        <div id="wallTypeTotals" class="summary-list muted">No walls saved yet.</div>
       </section>
 
       <section class="panel">
