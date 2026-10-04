@@ -11,7 +11,7 @@
     selectedId: null,
     walls: new Map(),
     detectedUnits: null,
-    calibration: { active: false, points: [], feetPerUnit: null },
+    calibration: { activePoint: null, points: [null, null], feetPerUnit: null },
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
     dragging: false,
@@ -253,32 +253,37 @@
 
   function drawCalibrationOverlay() {
     const pts = state.calibration.points;
-    if (!pts.length) return;
+    const entries = pts
+      .map((p, i) => p ? { p, index: i } : null)
+      .filter(Boolean);
+    if (!entries.length) return;
 
-    const screens = pts.map(p => worldToScreen(p.x, p.y));
     ctx.save();
     ctx.strokeStyle = "#50e3c2";
     ctx.fillStyle = "#50e3c2";
     ctx.lineWidth = 2;
     ctx.setLineDash([7, 5]);
 
-    if (screens.length === 2) {
+    if (pts[0] && pts[1]) {
+      const a = worldToScreen(pts[0].x, pts[0].y);
+      const b = worldToScreen(pts[1].x, pts[1].y);
       ctx.beginPath();
-      ctx.moveTo(screens[0].x, screens[0].y);
-      ctx.lineTo(screens[1].x, screens[1].y);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
       ctx.stroke();
     }
 
     ctx.setLineDash([]);
-    screens.forEach((p, i) => {
+    entries.forEach(({ p, index }) => {
+      const s = worldToScreen(p.x, p.y);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, 8, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#081310";
-      ctx.font = "bold 10px system-ui";
+      ctx.font = "bold 11px system-ui";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(String(i + 1), p.x, p.y);
+      ctx.fillText(String(index + 1), s.x, s.y);
       ctx.fillStyle = "#50e3c2";
     });
     ctx.restore();
@@ -340,69 +345,83 @@
   function updateCalibrationUI() {
     const cal = state.calibration;
     const status = $("calibrationStatus");
-    const form = $("calibrationForm");
     const reset = $("resetCalibrationBtn");
     const badge = $("scaleBadge");
     const hint = $("hintbar");
+    const has1 = !!cal.points[0];
+    const has2 = !!cal.points[1];
+    const hasBoth = has1 && has2;
 
-    if (cal.active) {
-      $("calibrateBtn").textContent = "Calibrating…";
-      $("calibrateBtn").classList.add("active-tool");
-      if (cal.points.length === 0) {
-        status.textContent = "Tap the first point of a known dimension.";
-        hint.textContent = "CALIBRATION: Tap point 1. You can still drag to pan or pinch to zoom.";
-        form.classList.add("hidden");
-      } else if (cal.points.length === 1) {
-        status.textContent = "Point 1 selected. Tap the second point.";
-        hint.textContent = "CALIBRATION: Tap point 2 of the known dimension.";
-        form.classList.add("hidden");
-      } else {
-        const raw = rawPointDistance(cal.points[0], cal.points[1]);
-        const measured = raw * baseFeetPerUnit();
-        $("calibrationMeasured").textContent = formatFeetInches(measured);
-        status.textContent = "Enter the real distance between the two selected points.";
-        hint.textContent = "Enter the known distance and press Apply Calibration.";
-        form.classList.remove("hidden");
-      }
+    $("scale1Btn").classList.toggle("active-tool", cal.activePoint === 0);
+    $("scale2Btn").classList.toggle("active-tool", cal.activePoint === 1);
+    $("scale1Btn").classList.toggle("point-set", has1);
+    $("scale2Btn").classList.toggle("point-set", has2);
+
+    $("scale1Status").textContent = has1 ? "Set" : "Not set";
+    $("scale2Status").textContent = has2 ? "Set" : "Not set";
+    $("applyCalibrationBtn").disabled = !hasBoth;
+
+    if (hasBoth) {
+      const raw = rawPointDistance(cal.points[0], cal.points[1]);
+      const measured = raw * baseFeetPerUnit();
+      $("calibrationMeasured").textContent = formatFeetInches(measured);
     } else {
-      $("calibrateBtn").textContent = "Calibrate Scale";
-      $("calibrateBtn").classList.remove("active-tool");
-      form.classList.add("hidden");
-      hint.textContent = "Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.";
-      if (cal.feetPerUnit) {
-        status.textContent = "Scale is calibrated from a known dimension. Wall lengths use the calibrated scale.";
-        reset.classList.remove("hidden");
-        badge.textContent = "Scale: Calibrated";
-        badge.classList.add("calibrated");
-      } else {
-        status.textContent = "Using DXF units. For converted drawings, calibrate from a known dimension before takeoff.";
-        reset.classList.add("hidden");
-        badge.textContent = "Scale: DXF units";
-        badge.classList.remove("calibrated");
-      }
+      $("calibrationMeasured").textContent = "—";
     }
+
+    if (cal.activePoint === 0) {
+      status.textContent = "Scale 1 is active. Tap the first point of the known dimension.";
+      hint.textContent = "SCALE 1 ACTIVE: Tap point 1. Drag to pan or pinch to zoom.";
+    } else if (cal.activePoint === 1) {
+      status.textContent = "Scale 2 is active. Tap the second point of the known dimension.";
+      hint.textContent = "SCALE 2 ACTIVE: Tap point 2. Drag to pan or pinch to zoom.";
+    } else if (hasBoth) {
+      status.textContent = cal.feetPerUnit
+        ? "Scale 1 and Scale 2 are set. Change the known dimension or either point and Apply again if needed."
+        : "Both scale points are set. Enter the known dimension and press Apply Calibration.";
+      hint.textContent = "Tap a line to select it. Scale 1 and Scale 2 can be reset independently.";
+    } else if (has1 || has2) {
+      status.textContent = "One scale point is set. Activate the other Scale button and tap its point.";
+      hint.textContent = "Set the remaining scale point, or tap a wall line when no Scale button is active.";
+    } else {
+      status.textContent = "Set Scale 1 and Scale 2 on a known dimension, then enter the real distance.";
+      hint.textContent = "Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.";
+    }
+
+    if (cal.feetPerUnit) {
+      reset.classList.remove("hidden");
+      badge.textContent = "Scale: Calibrated";
+      badge.classList.add("calibrated");
+    } else {
+      reset.classList.toggle("hidden", !(has1 || has2));
+      badge.textContent = "Scale: DXF units";
+      badge.classList.remove("calibrated");
+    }
+
     draw();
   }
 
-  function startCalibration() {
+  function activateScalePoint(index) {
     if (!state.segments.length) {
       alert("Open a DXF drawing first.");
       return;
     }
-    state.calibration.active = true;
-    state.calibration.points = [];
+    state.calibration.activePoint =
+      state.calibration.activePoint === index ? null : index;
     selectSegment(null);
     updateCalibrationUI();
   }
 
   function cancelCalibration() {
-    state.calibration.active = false;
-    state.calibration.points = [];
+    state.calibration.activePoint = null;
     updateCalibrationUI();
   }
 
   function applyCalibration() {
-    if (state.calibration.points.length !== 2) return;
+    if (!state.calibration.points[0] || !state.calibration.points[1]) {
+      alert("Set both Scale 1 and Scale 2 first.");
+      return;
+    }
     const feet = Math.max(0, Number($("calibrationFeet").value) || 0);
     const inches = Math.max(0, Number($("calibrationInches").value) || 0);
     const actualFeet = feet + inches / 12;
@@ -412,19 +431,18 @@
     }
     const raw = rawPointDistance(state.calibration.points[0], state.calibration.points[1]);
     if (!(raw > 0)) {
-      alert("The two calibration points are too close together.");
+      alert("Scale 1 and Scale 2 are too close together.");
       return;
     }
     state.calibration.feetPerUnit = actualFeet / raw;
-    state.calibration.active = false;
-    state.calibration.points = [];
+    state.calibration.activePoint = null;
     recalcAllWallsForUnits();
     updateCalibrationUI();
   }
 
   function resetCalibration() {
-    state.calibration.active = false;
-    state.calibration.points = [];
+    state.calibration.activePoint = null;
+    state.calibration.points = [null, null];
     state.calibration.feetPerUnit = null;
     recalcAllWallsForUnits();
     updateCalibrationUI();
@@ -740,7 +758,7 @@
     state.fileName = file.name;
     state.segments = parsed.segments;
     state.detectedUnits = parsed.detectedUnits;
-    state.calibration = { active: false, points: [], feetPerUnit: null };
+    state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
     state.selectedId = null;
@@ -761,17 +779,15 @@
   $("unitSelect").addEventListener("change", () => {
     if (state.calibration.feetPerUnit) {
       state.calibration.feetPerUnit = null;
-      state.calibration.points = [];
-      state.calibration.active = false;
+      state.calibration.points = [null, null];
+      state.calibration.activePoint = null;
     }
     recalcAllWallsForUnits();
     updateCalibrationUI();
   });
 
-  $("calibrateBtn").addEventListener("click", () => {
-    if (state.calibration.active) cancelCalibration();
-    else startCalibration();
-  });
+  $("scale1Btn").addEventListener("click", () => activateScalePoint(0));
+  $("scale2Btn").addEventListener("click", () => activateScalePoint(1));
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);
   $("cancelCalibrationBtn").addEventListener("click", cancelCalibration);
   $("resetCalibrationBtn").addEventListener("click", resetCalibration);
@@ -867,11 +883,16 @@
     if (hadOne && !state.moved) {
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      if (state.calibration.active && state.calibration.points.length < 2) {
+      if (state.calibration.activePoint !== null) {
+        const pointIndex = state.calibration.activePoint;
         const p = nearestCalibrationPoint(sx, sy);
-        state.calibration.points.push(p);
+        state.calibration.points[pointIndex] = p;
+        state.calibration.activePoint = null;
+        // Changing either point invalidates the previous calibration until Apply is pressed again.
+        state.calibration.feetPerUnit = null;
+        recalcAllWallsForUnits();
         updateCalibrationUI();
-      } else if (!state.calibration.active) {
+      } else {
         pickSegment(sx, sy);
       }
     }

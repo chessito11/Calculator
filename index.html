@@ -17,7 +17,8 @@
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
       <input id="dxfFile" type="file" hidden>
       <button id="fitBtn" class="button">Fit Drawing</button>
-      <button id="calibrateBtn" class="button">Calibrate Scale</button>
+      <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
+      <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
       <button id="exportCsvBtn" class="button">Export CSV</button>
     </div>
   </header>
@@ -62,9 +63,13 @@
           <button id="resetCalibrationBtn" class="text-button hidden" type="button">Reset</button>
         </div>
         <div id="calibrationStatus" class="muted calibration-copy">
-          Open a DXF, then press Calibrate Scale and tap two points with a known real-world distance.
+          Set Scale 1 and Scale 2 on a known dimension, then enter the real distance.
         </div>
-        <div id="calibrationForm" class="hidden calibration-form">
+        <div id="calibrationForm" class="calibration-form">
+          <div class="scale-point-status">
+            <div><span>Scale 1</span><strong id="scale1Status">Not set</strong></div>
+            <div><span>Scale 2</span><strong id="scale2Status">Not set</strong></div>
+          </div>
           <div class="calibration-measured">
             <span>Current measured distance</span>
             <strong id="calibrationMeasured">—</strong>
@@ -78,8 +83,8 @@
             </label>
           </div>
           <div class="form-actions">
-            <button id="applyCalibrationBtn" class="button primary grow" type="button">Apply Calibration</button>
-            <button id="cancelCalibrationBtn" class="button" type="button">Cancel</button>
+            <button id="applyCalibrationBtn" class="button primary grow" type="button" disabled>Apply Calibration</button>
+            <button id="cancelCalibrationBtn" class="button" type="button">Cancel Point</button>
           </div>
         </div>
       </section>
