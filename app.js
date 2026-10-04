@@ -537,9 +537,21 @@
     URL.revokeObjectURL(url);
   }
 
+  $("openDxfBtn").addEventListener("click", () => {
+    const input = $("dxfFile");
+    input.value = "";
+    input.click();
+  });
+
   $("dxfFile").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!/\.dxf$/i.test(file.name)) {
+      alert("Please choose a DXF file. On iPhone/iPad, use Browse in the Files picker if the DXF is stored in iCloud Drive or Downloads.");
+      return;
+    }
+
     const text = await file.text();
     const parsed = parseDXF(text);
 
