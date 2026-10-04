@@ -1,237 +1,187 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Material Calculator V1.1</title>
-<style>
-  :root{
-    --bg:#f5f7fa; --card:#ffffff; --text:#17202a; --muted:#667085;
-    --line:#d8dee8; --accent:#243b53; --soft:#eef3f8; --danger:#a61b1b;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text)}
-  header{background:var(--accent);color:#fff;padding:18px 20px;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-  header h1{font-size:21px;margin:0 0 4px}
-  header p{margin:0;font-size:13px;opacity:.85}
-  main{max-width:1180px;margin:auto;padding:18px;display:grid;grid-template-columns:1.05fr .95fr;gap:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 3px 12px rgba(16,24,40,.05)}
-  h2{font-size:16px;margin:0 0 14px}
-  h3{font-size:14px;margin:18px 0 10px;color:var(--accent)}
-  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  label{font-size:12px;font-weight:700;color:#344054;display:block;margin-bottom:5px}
-  input,select,button{font:inherit}
-  input,select{width:100%;padding:10px 11px;border:1px solid #c9d1dc;border-radius:9px;background:#fff;color:var(--text)}
-  input:focus,select:focus{outline:2px solid #a7c7e7;border-color:#7aa7d6}
-  button{border:0;border-radius:9px;padding:10px 13px;cursor:pointer;font-weight:700}
-  .primary{background:var(--accent);color:white}
-  .secondary{background:var(--soft);color:var(--accent);border:1px solid var(--line)}
-  .danger{background:#fff1f1;color:var(--danger);border:1px solid #f0bcbc}
-  .row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-  .wall-row{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px;background:#fbfcfe}
-  .dimension-block{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
-  .dimension-title{font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
-  .dimension-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .unit-input{position:relative}
-  .unit-input input{font-size:20px;font-weight:800;padding:14px 42px 14px 12px;text-align:center}
-  .unit-label{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:800;color:var(--muted);pointer-events:none}
-  .wall-dims-summary{margin-top:10px;font-size:13px;color:var(--muted);font-weight:700}
-  .wall-row-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
-  .wall-row-title{font-weight:800;font-size:13px}
-  .mini{font-size:12px;color:var(--muted)}
-  .summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .metric{background:var(--soft);border-radius:10px;padding:12px}
-  .metric b{display:block;font-size:20px;margin-top:3px;color:var(--accent)}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-  .note{font-size:12px;color:var(--muted);line-height:1.45;background:#f8fafc;border:1px dashed var(--line);padding:10px;border-radius:9px;margin-top:12px}
-  .preview{position:relative;height:250px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(#fff,#f9fbfd);overflow:hidden;margin-top:12px}
-  .track{position:absolute;left:6%;right:6%;height:8px;background:#9aa8b7;border-radius:3px}
-  .track.top{top:8%}.track.bottom{bottom:8%}
-  .stud{position:absolute;top:8%;bottom:8%;width:5px;background:#6f7f8f;border-radius:2px}
-  .preview-label{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--muted);background:rgba(255,255,255,.85);padding:4px 6px;border-radius:5px}
-  .empty{color:var(--muted);font-size:13px;padding:8px 0}
-  .footer{max-width:1180px;margin:0 auto 24px;padding:0 18px;color:var(--muted);font-size:12px}
-  @media(max-width:850px){main{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}}
-  @media(max-width:560px){main{padding:10px}.card{padding:13px;border-radius:10px}.grid,.grid3,.summary{grid-template-columns:1fr}.preview{height:190px}header{position:static}.row-actions button{flex:1}}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#17191d" />
+  <title>ATLAS Takeoff</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header>
-  <h1>Material Calculator V1</h1>
-  <p>Assembly-based metal framing calculator</p>
-</header>
-<main>
-  <section class="card">
-    <h2>Project & Assembly</h2>
-    <div class="grid">
-      <div><label>Project Name</label><input id="projectName" value="New Project"></div>
-      <div><label>Assembly / Wall Type</label><input id="assemblyName" value="W1"></div>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Standalone DXF framing takeoff</div>
+      <h1>ATLAS Takeoff</h1>
     </div>
-
-    <h3>Framing Setup</h3>
-    <div class="grid3">
-      <div><label>Stud Size</label><select id="studSize">
-        <option>1-5/8\"</option><option>2-1/2\"</option><option selected>3-5/8\"</option><option>4\"</option><option>6\"</option><option>8\"</option><option>10\"</option>
-      </select></div>
-      <div><label>Gauge</label><select id="gauge"><option>25ga</option><option selected>20ga</option><option>18ga</option><option>16ga</option><option>14ga</option></select></div>
-      <div><label>Stud Spacing</label><select id="spacing"><option value="12">12\" O.C.</option><option value="16" selected>16\" O.C.</option><option value="24">24\" O.C.</option></select></div>
-      <div><label>Stud Stock Length</label><select id="stockLength"><option value="8">8'</option><option value="10" selected>10'</option><option value="12">12'</option><option value="14">14'</option><option value="16">16'</option><option value="18">18'</option><option value="20">20'</option></select></div>
-      <div><label>Top Track</label><select id="topTrack"><option value="1" selected>Single Track</option><option value="2">Double Track</option><option value="1">Slip Track</option></select></div>
-      <div><label>Bottom Track</label><select id="bottomTrack"><option value="1" selected>Standard Track</option><option value="0">None</option></select></div>
-      <div><label>Waste %</label><input id="waste" type="number" min="0" step="1" value="10"></div>
-      <div><label>Extra Studs Per Wall End</label><input id="endStuds" type="number" min="0" step="1" value="0"></div>
-      <div><label>Track Stock Length</label><select id="trackStock"><option value="10" selected>10'</option><option value="12">12'</option><option value="16">16'</option><option value="20">20'</option></select></div>
+    <div class="top-actions">
+      <label class="button primary">
+        Open DXF
+        <input id="dxfFile" type="file" accept=".dxf,text/plain" hidden>
+      </label>
+      <button id="fitBtn" class="button">Fit Drawing</button>
+      <button id="exportCsvBtn" class="button">Export CSV</button>
     </div>
+  </header>
 
-    <h3>Add Wall Run</h3>
-    <div class="wall-row">
-      <div><label>Name / Location</label><input id="entryName" value="Wall 1"></div>
-      <div class="dimension-block"><div class="dimension-title">Wall Length</div><div class="dimension-grid">
-        <div class="unit-input"><input id="entryLF" inputmode="numeric" type="number" min="0" value="20"><span class="unit-label">FT</span></div>
-        <div class="unit-input"><input id="entryLIN" inputmode="numeric" type="number" min="0" max="11" value="0"><span class="unit-label">IN</span></div>
-      </div></div>
-      <div class="dimension-block"><div class="dimension-title">Wall Height</div><div class="dimension-grid">
-        <div class="unit-input"><input id="entryHF" inputmode="numeric" type="number" min="0" value="10"><span class="unit-label">FT</span></div>
-        <div class="unit-input"><input id="entryHIN" inputmode="numeric" type="number" min="0" max="11" value="0"><span class="unit-label">IN</span></div>
-      </div></div>
-      <div><label>Quantity</label><input id="entryQty" inputmode="numeric" type="number" min="1" value="1"></div>
-      <div class="row-actions"><button type="button" class="primary" id="addWallBtn" onclick="commitWall(); return false;">+ Add Wall</button></div>
-    </div>
-    <h3>Walls Added</h3><div id="wallList"></div>
-    <div class="row-actions"><button type="button" class="secondary" id="sampleBtn">Load Sample</button><button type="button" class="secondary" id="clearBtn">Clear Walls</button></div>
-    <div class="note">V1 stud count assumes a stud at each end of every wall run, with field studs based on O.C. spacing. Openings are not deducted yet; those come in the next build so jambs, headers, cripples, and deductions can be handled correctly.</div>
-  </section>
-
-  <section>
-    <div class="card">
-      <h2>Live Assembly Summary</h2>
-      <div class="summary">
-        <div class="metric"><span class="mini">Total Wall Length</span><b id="totalLength">0 LF</b></div>
-        <div class="metric"><span class="mini">Wall Area</span><b id="totalArea">0 SF</b></div>
-        <div class="metric"><span class="mini">Studs to Order</span><b id="studPieces">0 pcs</b></div>
-        <div class="metric"><span class="mini">Track to Order</span><b id="trackPieces">0 pcs</b></div>
+  <main class="app-grid">
+    <section class="viewer-card">
+      <div class="viewer-toolbar">
+        <div id="fileStatus">No DXF loaded</div>
+        <div class="toolbar-right">
+          <label>DXF units
+            <select id="unitSelect">
+              <option value="auto">Auto</option>
+              <option value="in">Inches</option>
+              <option value="ft">Feet</option>
+              <option value="mm">Millimeters</option>
+              <option value="cm">Centimeters</option>
+              <option value="m">Meters</option>
+            </select>
+          </label>
+          <span id="wallCountBadge" class="badge">0 walls</span>
+        </div>
       </div>
-      <div class="preview" id="preview">
-        <div class="track top"></div><div class="track bottom"></div>
-        <div class="preview-label" id="previewLabel">Add a wall run to preview stud spacing.</div>
-      </div>
-    </div>
 
-    <div class="card" style="margin-top:18px">
-      <h2>Material List</h2>
-      <table>
-        <thead><tr><th>Material</th><th>Calculated</th><th>Order</th></tr></thead>
-        <tbody id="materialBody"></tbody>
-      </table>
-      <div class="row-actions">
-        <button type="button" class="secondary" id="copyBtn">Copy Material List</button>
-        <button type="button" class="secondary" id="printBtn">Print / Save PDF</button>
+      <div id="canvasWrap">
+        <canvas id="dxfCanvas"></canvas>
+        <div id="emptyState" class="empty-state">
+          <strong>Open a DXF drawing</strong>
+          <span>Then tap a wall line to create a takeoff item.</span>
+        </div>
       </div>
-    </div>
-  </section>
-</main>
-<div class="footer">Material Calculator V1 • Numbers are estimating aids and should be checked against project drawings, specs, engineering requirements, and manufacturer instructions.</div>
-<script>
-let walls=[];
-const $=id=>document.getElementById(id);
-function ftIn(feet,inches){return Number(feet||0)+Number(inches||0)/12}
-function fmtFt(n){let ft=Math.floor(n+1e-9);let inch=Math.round((n-ft)*12);if(inch===12){ft++;inch=0}return `${ft}'-${inch}\"`}
-function addWall(data){walls.push({...data});renderWalls();calculate()}
-function renderWalls(){
- const box=$('wallList');box.innerHTML='';
- if(!walls.length){box.innerHTML='<div class="empty">No walls added yet. Enter dimensions above and tap + Add Wall.</div>';return}
- walls.forEach((w,i)=>{
-  const div=document.createElement('div');div.className='wall-row';
-  div.innerHTML=`<div class="wall-row-head"><div><div class="wall-row-title">${w.name}</div><div class="mini">${fmtFt(ftIn(w.lf,w.lin))} long × ${fmtFt(ftIn(w.hf,w.hin))} high</div></div><button type="button" class="danger" data-del="${i}">Delete</button></div>`;
-  box.appendChild(div);
- });
- box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{walls.splice(+b.dataset.del,1);renderWalls();calculate()});
-}
-function calculate(){
- const spacing=+$('spacing').value, waste=+$('waste').value/100, stock=+$('stockLength').value, trackStock=+$('trackStock').value;
- const topMult=+$('topTrack').value,bottomMult=+$('bottomTrack').value,endExtra=+$('endStuds').value;
- let totalLen=0,totalArea=0,studCalc=0,studLF=0,trackLF=0;
- walls.forEach(w=>{
-  const L=ftIn(w.lf,w.lin),H=ftIn(w.hf,w.hin); if(L<=0||H<=0)return;
-  totalLen+=L; totalArea+=L*H;
-  const field=Math.ceil((L*12)/spacing)+1;
-  const studs=field+(endExtra*2);
-  studCalc+=studs; studLF+=studs*H;
-  trackLF+=L*(topMult+bottomMult);
- });
- const studOrder=Math.ceil(studCalc*(1+waste));
- const trackOrderLF=trackLF*(1+waste);
- const trackPieces=Math.ceil(trackOrderLF/trackStock);
- $('totalLength').textContent=`${totalLen.toFixed(1)} LF`;
- $('totalArea').textContent=`${Math.round(totalArea)} SF`;
- $('studPieces').textContent=`${studOrder} pcs`;
- $('trackPieces').textContent=`${trackPieces} pcs`;
- const body=$('materialBody');
- body.innerHTML=`
- <tr><td>${$('studSize').value} ${$('gauge').value} studs @ ${spacing}\" O.C.</td><td>${studCalc} pcs / ${Math.round(studLF)} LF</td><td>${studOrder} pcs @ ${stock}'</td></tr>
- <tr><td>${$('studSize').value} track</td><td>${trackLF.toFixed(1)} LF</td><td>${trackPieces} pcs @ ${trackStock}' (${trackOrderLF.toFixed(1)} LF incl. waste)</td></tr>
- <tr><td>Wall assembly area</td><td>${Math.round(totalArea)} SF</td><td>—</td></tr>`;
- drawPreview();
- saveState();
-}
-function drawPreview(){
- const p=$('preview'); p.querySelectorAll('.stud').forEach(x=>x.remove());
- if(!walls.length){$('previewLabel').textContent='Add a wall run to preview stud spacing.';return}
- const w=walls[0],L=ftIn(w.lf,w.lin),spacing=+$('spacing').value;
- if(L<=0)return;
- const count=Math.ceil(L*12/spacing)+1;
- const shown=Math.min(count,35);
- for(let i=0;i<shown;i++){
-   const s=document.createElement('div');s.className='stud';
-   const pct=6+(88*(i/(shown-1||1)));s.style.left=`${pct}%`;p.appendChild(s)
- }
- $('previewLabel').textContent=`Preview: ${w.name} • ${fmtFt(L)} • studs ${spacing}\" O.C.${count>35?' (compressed)':''}`;
-}
-function copyList(){
- const rows=[...$('materialBody').querySelectorAll('tr')].map(r=>[...r.children].map(c=>c.innerText).join(' | '));
- const txt=`${$('projectName').value} - ${$('assemblyName').value}\n`+rows.join('\n');
- navigator.clipboard.writeText(txt).then(()=>{const b=$('copyBtn');const old=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=old,1200)})
-}
-function saveState(){
- try{
-  const settings=['projectName','assemblyName','studSize','gauge','spacing','stockLength','topTrack','bottomTrack','waste','endStuds','trackStock'].reduce((o,id)=>(o[id]=$(id).value,o),{});
-  localStorage.setItem('materialCalcV12',JSON.stringify({walls,settings}));
- }catch(e){ console.warn('Autosave unavailable in this browser mode.',e); }
-}
-function loadState(){
- try{const raw=localStorage.getItem('materialCalcV12');if(!raw)return false;const x=JSON.parse(raw);walls=x.walls||[];Object.entries(x.settings||{}).forEach(([k,v])=>{if($(k))$(k).value=v});return true}catch(e){console.warn('Saved data unavailable.',e);return false}
-}
 
-function commitWall(){
- try{
-  let lf=parseFloat($('entryLF').value)||0, lin=parseFloat($('entryLIN').value)||0;
-  let hf=parseFloat($('entryHF').value)||0, hin=parseFloat($('entryHIN').value)||0;
-  const qty=Math.max(1,Math.floor(parseFloat($('entryQty').value)||1));
-  lf += Math.floor(lin/12); lin = lin%12; hf += Math.floor(hin/12); hin = hin%12;
-  if(ftIn(lf,lin)<=0){alert('Please enter the wall length.');return;}
-  if(ftIn(hf,hin)<=0){alert('Please enter the wall height.');return;}
-  const base=($('entryName').value||'').trim()||`Wall ${walls.length+1}`;
-  for(let q=0;q<qty;q++) walls.push({name:qty>1?`${base} (${q+1})`:base,lf,lin,hf,hin});
-  renderWalls(); calculate();
-  $('entryName').value=`Wall ${walls.length+1}`; $('entryLF').value=''; $('entryLIN').value='0'; $('entryQty').value='1';
- }catch(err){alert('Could not add wall: '+err.message);}
-}
-function wireButtons(){
- const addBtn=$('addWallBtn');
- if(addBtn){addBtn.onclick=function(e){e.preventDefault();commitWall();};}
-  const sampleBtn=$('sampleBtn');
- if(sampleBtn) sampleBtn.addEventListener('click',function(e){e.preventDefault();walls=[{name:'North Corridor',lf:24,lin:6,hf:10,hin:0},{name:'Room 101',lf:12,lin:8,hf:10,hin:0},{name:'Room 102',lf:12,lin:8,hf:10,hin:0}];renderWalls();calculate();});
- const clearBtn=$('clearBtn');
- if(clearBtn) clearBtn.addEventListener('click',function(e){e.preventDefault();walls=[];renderWalls();calculate();});
- const copyBtn=$('copyBtn'); if(copyBtn) copyBtn.addEventListener('click',function(e){e.preventDefault();copyList();});
- const printBtn=$('printBtn'); if(printBtn) printBtn.addEventListener('click',function(e){e.preventDefault();window.print();});
-}
-wireButtons();
-['projectName','assemblyName','studSize','gauge','spacing','stockLength','topTrack','bottomTrack','waste','endStuds','trackStock'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',calculate)});
-loadState();renderWalls();calculate()
-</script>
+      <div class="hintbar">
+        Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <section class="panel">
+        <h2>Selected Wall</h2>
+        <div id="selectionEmpty" class="muted">Select a line in the drawing.</div>
+
+        <form id="wallForm" class="wall-form hidden">
+          <div class="field-row">
+            <label>Wall #
+              <input id="wallNumber" type="text" autocomplete="off">
+            </label>
+            <label>Length
+              <input id="wallLength" type="text" readonly>
+            </label>
+          </div>
+
+          <div class="field-row">
+            <label>Height
+              <select id="wallHeight">
+                <option value="8">8'-0"</option>
+                <option value="9">9'-0"</option>
+                <option value="10" selected>10'-0"</option>
+                <option value="12">12'-0"</option>
+                <option value="14">14'-0"</option>
+                <option value="16">16'-0"</option>
+                <option value="18">18'-0"</option>
+                <option value="20">20'-0"</option>
+              </select>
+            </label>
+            <label>Stud size
+              <select id="studSize">
+                <option>1-5/8"</option>
+                <option>2-1/2"</option>
+                <option selected>3-5/8"</option>
+                <option>4"</option>
+                <option>6"</option>
+                <option>8"</option>
+                <option>10"</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-row">
+            <label>Gauge
+              <select id="gauge">
+                <option>25ga</option>
+                <option selected>20ga</option>
+                <option>18ga</option>
+                <option>16ga</option>
+                <option>14ga</option>
+              </select>
+            </label>
+            <label>Spacing
+              <select id="spacing">
+                <option value="12">12" O.C.</option>
+                <option value="16" selected>16" O.C.</option>
+                <option value="24">24" O.C.</option>
+              </select>
+            </label>
+          </div>
+
+          <label>Top track
+            <select id="topTrack">
+              <option selected>Standard</option>
+              <option>Slip / Deep Leg</option>
+              <option>Deflection</option>
+              <option>None</option>
+            </select>
+          </label>
+
+          <label>Bottom track
+            <select id="bottomTrack">
+              <option selected>Standard</option>
+              <option>None</option>
+            </select>
+          </label>
+
+          <div class="field-row">
+            <label class="checkline">
+              <input id="doubleEnds" type="checkbox">
+              Double end studs
+            </label>
+            <label>Waste %
+              <input id="wastePercent" type="number" min="0" max="30" step="1" value="0">
+            </label>
+          </div>
+
+          <div class="calc-box">
+            <div><span>Stud quantity</span><strong id="calcStuds">—</strong></div>
+            <div><span>Bottom track</span><strong id="calcBottom">—</strong></div>
+            <div><span>Top track</span><strong id="calcTop">—</strong></div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="button primary grow">Save Wall</button>
+            <button id="deleteWallBtn" type="button" class="button danger">Delete</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Wall Takeoff</h2>
+          <button id="clearWallsBtn" class="text-button">Clear</button>
+        </div>
+        <div class="table-wrap">
+          <table id="wallTable">
+            <thead>
+              <tr>
+                <th>Wall</th>
+                <th>Length</th>
+                <th>Ht.</th>
+                <th>Stud</th>
+                <th>Qty</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Material Summary</h2>
+        <div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
 </body>
 </html>
