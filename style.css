@@ -279,3 +279,154 @@ tbody tr:hover { background: #212630; }
     max-width: 125px;
   }
 }
+
+
+/* V1.6 compact toolbar / More menu */
+.setup-panel-hidden {
+  display: none !important;
+}
+
+.more-menu {
+  position: relative;
+}
+
+.more-menu > summary {
+  list-style: none;
+}
+
+.more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.more-menu[open] .more-summary {
+  background: #2b313c;
+}
+
+.more-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  width: 190px;
+  padding: 9px;
+  display: grid;
+  gap: 8px;
+  background: #171a20;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0,0,0,.45);
+}
+
+.more-menu-panel .button {
+  width: 100%;
+  text-align: left;
+}
+
+.more-field {
+  padding: 4px 2px;
+}
+
+.more-field select {
+  margin-top: 3px;
+}
+
+@media (max-width: 700px) {
+  .top-actions {
+    max-width: none;
+  }
+
+  .more-menu-panel {
+    position: fixed;
+    top: 70px;
+    right: 10px;
+    width: min(230px, calc(100vw - 20px));
+  }
+}
+
+
+/* V1.7 Bluebeam-style Takeoff Markups List */
+.markups-subtitle {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.markups-toolbar {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.markups-table-wrap {
+  max-height: 360px;
+}
+
+.markups-table tbody tr.selected-markup {
+  background: rgba(77, 163, 255, .18);
+  outline: 1px solid rgba(77, 163, 255, .5);
+  outline-offset: -1px;
+}
+
+.markup-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.markup-locate,
+.markup-delete {
+  border: 1px solid #3a414d;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #232933;
+  color: #dfe7f0;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.markup-delete {
+  color: #ffd7d5;
+  border-color: #693d3d;
+  background: #382426;
+}
+
+.markup-locate:hover {
+  background: #303845;
+}
+
+.markup-delete:hover {
+  background: #4a292c;
+}
+
+.danger-soft {
+  color: #ffd7d5;
+  border-color: #693d3d;
+  background: #2c2224;
+}
+
+.button:disabled,
+#undoLastBtn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .markups-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .markups-toolbar label {
+    grid-column: 1 / -1;
+  }
+
+  .markups-table {
+    min-width: 690px;
+  }
+}

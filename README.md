@@ -155,3 +155,63 @@ Walls are grouped by type and the program totals:
 - Total bottom track LF
 
 The detailed Wall Takeoff table also shows the type assigned to each individual wall, and CSV export now includes the Wall Type column.
+
+
+## Version 1.6 — Compact everyday toolbar
+
+The main toolbar now keeps only the tools used constantly:
+
+- Open DXF
+- WALL
+- TRACE WALLS
+- More
+
+The **More** menu contains the less-used setup/actions:
+
+- Fit Drawing
+- Scale 1
+- Scale 2
+- DXF units
+- Export CSV
+
+The Scale Calibration panel is hidden during normal wall takeoff. It appears only when Scale 1 or Scale 2 is selected, and hides again after calibration is applied or when WALL / TRACE WALLS is selected.
+
+No measuring, wall takeoff, wall type, calibration, summary, or export functionality was removed.
+
+
+## Version 1.7 — Bluebeam-style Takeoff Markups List
+
+The wall takeoff list now behaves more like a Bluebeam Markups List.
+
+### Individual markup management
+
+Every saved or traced wall appears as an individual Takeoff Markup. Each row keeps:
+
+- Wall number
+- Wall type
+- Length
+- Height
+- Stud size / gauge
+- Stud quantity
+
+Tap a row to select the wall. Use **Locate** to center/highlight it on the drawing. Use **Delete** to remove only that wall.
+
+Deleting a manually traced wall also removes its orange/manual wall segment from the drawing. Deleting an original DXF-line takeoff removes only the takeoff record and leaves the DXF geometry untouched.
+
+### Undo Last
+
+Takeoff changes now keep an undo history (up to 50 takeoff states).
+
+**Undo Last** can recover from:
+
+- Creating a wall
+- Tracing a wall
+- Editing/saving a wall
+- Deleting an individual wall
+- Clear All
+
+### Filter by wall type
+
+The Markups List can show all wall types or only one selected wall type. Wall Type Totals and Material Summary still calculate from the complete takeoff, not only the filtered rows.
+
+No existing scale, wall type, trace, takeoff, totals, material summary, or CSV functionality was removed.

@@ -16,21 +16,17 @@
     <div class="top-actions">
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
       <input id="dxfFile" type="file" hidden>
-      <button id="fitBtn" class="button">Fit Drawing</button>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
-      <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
-      <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
-      <button id="exportCsvBtn" class="button">Export CSV</button>
-    </div>
-  </header>
 
-  <main class="app-grid">
-    <section class="viewer-card">
-      <div class="viewer-toolbar">
-        <div id="fileStatus">No DXF loaded</div>
-        <div class="toolbar-right">
-          <label>DXF units
+      <details id="moreMenu" class="more-menu">
+        <summary class="button more-summary">More ▾</summary>
+        <div class="more-menu-panel">
+          <button id="fitBtn" class="button" type="button">Fit Drawing</button>
+          <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
+          <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
+
+          <label class="more-field">DXF units
             <select id="unitSelect">
               <option value="auto">Auto</option>
               <option value="in">Inches</option>
@@ -40,6 +36,18 @@
               <option value="m">Meters</option>
             </select>
           </label>
+
+          <button id="exportCsvBtn" class="button" type="button">Export CSV</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <main class="app-grid">
+    <section class="viewer-card">
+      <div class="viewer-toolbar">
+        <div id="fileStatus">No DXF loaded</div>
+        <div class="toolbar-right">
           <label>Active type
             <select id="activeWallTypeSelect">
               <option value="">Unassigned</option>
@@ -64,7 +72,7 @@
     </section>
 
     <aside class="side-panel">
-      <section id="calibrationPanel" class="panel calibration-panel">
+      <section id="calibrationPanel" class="panel calibration-panel setup-panel-hidden">
         <div class="panel-heading">
           <h2>Scale Calibration</h2>
           <button id="resetCalibrationBtn" class="text-button hidden" type="button">Reset</button>
@@ -219,13 +227,27 @@
         <div id="wallTypeLibraryList" class="summary-list muted">No wall types saved yet.</div>
       </section>
 
-      <section class="panel">
+      <section id="markupsPanel" class="panel">
         <div class="panel-heading">
-          <h2>Wall Takeoff</h2>
-          <button id="clearWallsBtn" class="text-button">Clear</button>
+          <div>
+            <h2>Takeoff Markups</h2>
+            <div class="muted markups-subtitle">Select, edit, locate, or delete individual walls.</div>
+          </div>
+          <span id="markupsCountBadge" class="badge">0 items</span>
         </div>
-        <div class="table-wrap">
-          <table id="wallTable">
+
+        <div class="markups-toolbar">
+          <label>Show type
+            <select id="markupsTypeFilter">
+              <option value="">All types</option>
+            </select>
+          </label>
+          <button id="undoLastBtn" class="button" type="button" disabled>Undo Last</button>
+          <button id="clearWallsBtn" class="button danger-soft" type="button">Clear All</button>
+        </div>
+
+        <div class="table-wrap markups-table-wrap">
+          <table id="wallTable" class="markups-table">
             <thead>
               <tr>
                 <th>Wall</th>
@@ -234,6 +256,7 @@
                 <th>Ht.</th>
                 <th>Stud</th>
                 <th>Qty</th>
+                <th></th>
               </tr>
             </thead>
             <tbody></tbody>

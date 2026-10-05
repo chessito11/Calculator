@@ -36,6 +36,7 @@
     wallTypes: loadWallTypes(),
     activeWallType: "",
     trace: { lastPoint: null },
+    history: [],
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
     dragging: false,
@@ -554,6 +555,8 @@
     state.toolMode = "trace";
     state.calibration.activePoint = null;
     state.trace.lastPoint = null;
+    hideCalibrationPanel();
+    closeMoreMenu();
     selectSegment(null, { preserveMode: true });
     updateToolUI();
     updateCalibrationUI();
@@ -582,6 +585,8 @@
       return;
     }
 
+    pushTakeoffHistory();
+
     const seg = {
       id: nextManualSegmentId(),
       x1: a.x, y1: a.y,
@@ -598,11 +603,24 @@
     } else {
       $("wallTypeSelect").value = "";
     }
-    saveWallFromForm({ preserveMode: true });
+    saveWallFromForm({ preserveMode: true, skipHistory: true });
     state.toolMode = "trace";
     updateToolUI();
     updateTraceUI();
     draw();
+  }
+
+  function closeMoreMenu() {
+    const menu = $("moreMenu");
+    if (menu) menu.open = false;
+  }
+
+  function showCalibrationPanel() {
+    $("calibrationPanel").classList.remove("setup-panel-hidden");
+  }
+
+  function hideCalibrationPanel() {
+    $("calibrationPanel").classList.add("setup-panel-hidden");
   }
 
   function updateToolUI() {
@@ -624,6 +642,8 @@
     state.toolMode = "wall";
     state.trace.lastPoint = null;
     state.calibration.activePoint = null;
+    hideCalibrationPanel();
+    closeMoreMenu();
     updateToolUI();
     updateCalibrationUI();
 
@@ -699,6 +719,8 @@
     }
     state.toolMode = "scale";
     state.trace.lastPoint = null;
+    showCalibrationPanel();
+    closeMoreMenu();
     state.calibration.activePoint =
       state.calibration.activePoint === index ? null : index;
     selectSegment(null);
@@ -730,6 +752,7 @@
     state.calibration.feetPerUnit = actualFeet / raw;
     state.calibration.activePoint = null;
     state.toolMode = "wall";
+    hideCalibrationPanel();
     recalcAllWallsForUnits();
     updateCalibrationUI();
   }
@@ -739,6 +762,7 @@
     state.calibration.points = [null, null];
     state.calibration.feetPerUnit = null;
     state.toolMode = "wall";
+    hideCalibrationPanel();
     recalcAllWallsForUnits();
     updateCalibrationUI();
   }
@@ -862,6 +886,13 @@
     }
     updateCalcPreview();
     draw();
+    updateMarkupSelectionHighlight();
+  }
+
+  function updateMarkupSelectionHighlight() {
+    document.querySelectorAll("#wallTable tbody tr").forEach(tr => {
+      tr.classList.toggle("selected-markup", Number(tr.dataset.segmentId) === state.selectedId);
+    });
   }
 
   function pointSegmentDistance(px, py, ax, ay, bx, by) {
@@ -890,6 +921,111 @@
     }
   }
 
+  function snapshotTakeoff() {
+    return {
+      walls: [...state.walls.entries()].map(([id, wall]) => [id, { ...wall }]),
+      manualSegments: state.segments
+        .filter(s => s.sourceType === "MANUAL_WALL")
+        .map(s => ({ ...s })),
+      selectedId: state.selectedId
+    };
+  }
+
+  function pushTakeoffHistory() {
+    state.history.push(snapshotTakeoff());
+    if (state.history.length > 50) state.history.shift();
+    updateUndoButton();
+  }
+
+  function updateUndoButton() {
+    const btn = $("undoLastBtn");
+    if (!btn) return;
+    btn.disabled = state.history.length === 0;
+    btn.textContent = state.history.length ? `Undo Last (${state.history.length})` : "Undo Last";
+  }
+
+  function undoLastTakeoff() {
+    const snap = state.history.pop();
+    if (!snap) return;
+
+    state.walls = new Map(snap.walls.map(([id, wall]) => [Number(id), { ...wall }]));
+    state.segments = state.segments.filter(s => s.sourceType !== "MANUAL_WALL");
+    for (const s of snap.manualSegments) state.segments.push({ ...s });
+
+    state.selectedId = null;
+    state.trace.lastPoint = null;
+    refreshTables();
+
+    if (snap.selectedId && state.segments.some(s => s.id === snap.selectedId)) {
+      selectSegment(snap.selectedId);
+    } else {
+      selectSegment(null);
+    }
+    updateUndoButton();
+    draw();
+  }
+
+  function focusWallSegment(id) {
+    const seg = state.segments.find(s => s.id === id);
+    if (!seg) return;
+
+    state.toolMode = "wall";
+    state.trace.lastPoint = null;
+    selectSegment(id);
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = (seg.x1 + seg.x2) / 2;
+    const my = (seg.y1 + seg.y2) / 2;
+    state.view.offsetX = rect.width / 2 - mx * state.view.scale;
+    state.view.offsetY = rect.height / 2 + my * state.view.scale;
+    draw();
+
+    if (window.innerWidth <= 980) {
+      $("selectedWallPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function deleteWallById(id, ask = false) {
+    const wall = state.walls.get(id);
+    if (!wall) return;
+
+    if (ask && !confirm(`Delete ${wall.wallNumber}${wall.wallType ? ` (${wall.wallType})` : ""}?`)) return;
+
+    pushTakeoffHistory();
+
+    const seg = state.segments.find(s => s.id === id);
+    state.walls.delete(id);
+
+    if (seg && seg.sourceType === "MANUAL_WALL") {
+      state.segments = state.segments.filter(s => s.id !== id);
+    }
+
+    if (state.selectedId === id) {
+      state.selectedId = null;
+      selectSegment(null);
+    }
+
+    refreshTables();
+    draw();
+  }
+
+  function refreshMarkupsFilter(walls) {
+    const filter = $("markupsTypeFilter");
+    if (!filter) return;
+    const current = filter.value;
+    const types = [...new Set(walls.map(w => w.wallType || "Unassigned"))]
+      .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+
+    filter.innerHTML = '<option value="">All types</option>';
+    for (const type of types) {
+      const opt = document.createElement("option");
+      opt.value = type;
+      opt.textContent = type;
+      filter.appendChild(opt);
+    }
+    filter.value = types.includes(current) ? current : "";
+  }
+
   function refreshTables() {
     const tbody = $("wallTable").querySelector("tbody");
     tbody.innerHTML = "";
@@ -900,20 +1036,54 @@
       return ta.localeCompare(tb, undefined, {numeric:true}) ||
         a.wallNumber.localeCompare(b.wallNumber, undefined, {numeric:true});
     });
-    for (const w of walls) {
+
+    refreshMarkupsFilter(walls);
+    const filterValue = $("markupsTypeFilter")?.value || "";
+    const visibleWalls = filterValue
+      ? walls.filter(w => (w.wallType || "Unassigned") === filterValue)
+      : walls;
+
+    for (const w of visibleWalls) {
       const tr = document.createElement("tr");
+      tr.dataset.segmentId = String(w.segmentId);
+      if (w.segmentId === state.selectedId) tr.classList.add("selected-markup");
+
       tr.innerHTML = `
-        <td>${escapeHtml(w.wallNumber)}</td>
+        <td><strong>${escapeHtml(w.wallNumber)}</strong></td>
         <td>${escapeHtml(w.wallType || "—")}</td>
         <td>${escapeHtml(formatFeetInches(w.lengthFt))}</td>
         <td>${escapeHtml(String(w.height))}'</td>
         <td>${escapeHtml(w.studSize)} ${escapeHtml(w.gauge)}</td>
-        <td>${w.studQty}</td>`;
-      tr.addEventListener("click", () => selectSegment(w.segmentId));
+        <td>${w.studQty}</td>
+        <td class="markup-actions">
+          <button class="markup-locate" type="button" title="Locate wall">Locate</button>
+          <button class="markup-delete" type="button" title="Delete wall">Delete</button>
+        </td>`;
+
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        focusWallSegment(w.segmentId);
+      });
+
+      tr.querySelector(".markup-locate").addEventListener("click", (e) => {
+        e.stopPropagation();
+        focusWallSegment(w.segmentId);
+      });
+
+      tr.querySelector(".markup-delete").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteWallById(w.segmentId, true);
+      });
+
       tbody.appendChild(tr);
     }
 
     $("wallCountBadge").textContent = `${walls.length} wall${walls.length === 1 ? "" : "s"}`;
+    $("markupsCountBadge").textContent = filterValue
+      ? `${visibleWalls.length} of ${walls.length}`
+      : `${walls.length} item${walls.length === 1 ? "" : "s"}`;
+
+    updateUndoButton();
     refreshWallTypeTotals(walls);
     refreshMaterialSummary(walls);
   }
@@ -1022,6 +1192,8 @@
       }
     }
 
+    if (!options.skipHistory) pushTakeoffHistory();
+
     state.walls.set(s.id, {
       segmentId: s.id,
       wallNumber,
@@ -1097,6 +1269,13 @@
     URL.revokeObjectURL(url);
   }
 
+  document.addEventListener("pointerdown", (e) => {
+    const menu = $("moreMenu");
+    if (menu && menu.open && !menu.contains(e.target)) {
+      menu.open = false;
+    }
+  });
+
   $("openDxfBtn").addEventListener("click", () => {
     const input = $("dxfFile");
     input.value = "";
@@ -1123,6 +1302,7 @@
     state.trace.lastPoint = null;
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
+    state.history = [];
     state.selectedId = null;
 
     $("emptyState").style.display = parsed.segments.length ? "none" : "flex";
@@ -1136,8 +1316,14 @@
     fitDrawing();
   });
 
-  $("fitBtn").addEventListener("click", fitDrawing);
-  $("exportCsvBtn").addEventListener("click", exportCSV);
+  $("fitBtn").addEventListener("click", () => {
+    fitDrawing();
+    closeMoreMenu();
+  });
+  $("exportCsvBtn").addEventListener("click", () => {
+    exportCSV();
+    closeMoreMenu();
+  });
   $("unitSelect").addEventListener("change", () => {
     if (state.calibration.feetPerUnit) {
       state.calibration.feetPerUnit = null;
@@ -1174,6 +1360,9 @@
   $("saveWallTypeBtn").addEventListener("click", saveWallTypeFromForm);
   $("deleteWallTypeBtn").addEventListener("click", deleteWallType);
 
+  $("undoLastBtn").addEventListener("click", undoLastTakeoff);
+  $("markupsTypeFilter").addEventListener("change", refreshTables);
+
   $("wallForm").addEventListener("submit", (e) => {
     e.preventDefault();
     saveWallFromForm();
@@ -1185,29 +1374,20 @@
   }
 
   $("deleteWallBtn").addEventListener("click", () => {
-    if (!state.selectedId) return;
-    const deletingId = state.selectedId;
-    const seg = state.segments.find(s => s.id === deletingId);
-    state.walls.delete(deletingId);
-    if (seg && seg.sourceType === "MANUAL_WALL") {
-      state.segments = state.segments.filter(s => s.id !== deletingId);
-      state.selectedId = null;
-      refreshTables();
-      selectSegment(null);
-    } else {
-      refreshTables();
-      selectSegment(deletingId);
-    }
+    if (!state.selectedId || !state.walls.has(state.selectedId)) return;
+    deleteWallById(state.selectedId, true);
   });
 
   $("clearWallsBtn").addEventListener("click", () => {
     if (!state.walls.size) return;
-    if (!confirm("Clear all saved wall takeoff items?")) return;
+    if (!confirm("Clear ALL takeoff wall markups? You can use Undo Last immediately afterward.")) return;
+    pushTakeoffHistory();
     state.walls.clear();
     state.segments = state.segments.filter(s => s.sourceType !== "MANUAL_WALL");
     state.trace.lastPoint = null;
+    state.selectedId = null;
     refreshTables();
-    if (state.selectedId) selectSegment(state.selectedId);
+    selectSegment(null);
     draw();
   });
 
