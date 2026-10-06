@@ -877,3 +877,107 @@ body {
     max-height: 210px;
   }
 }
+
+
+/* V2.4 — independent scrolling inside EVERY collapsible panel */
+
+/* The side column itself should not be the primary scroller anymore. */
+.side-panel {
+  overflow-y: hidden !important;
+  min-height: 0;
+}
+
+/* Each collapsible panel keeps its summary/header visible. */
+.scrollable-collapsible,
+.collapsible-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+/* Closed panels remain compact. */
+.collapsible-panel:not([open]) {
+  max-height: 42px;
+}
+
+/* Open panels get a bounded height so their CONTENT becomes the scroller. */
+.collapsible-panel[open] {
+  max-height: min(42vh, 420px);
+}
+
+/* Header stays fixed while body scrolls. */
+.collapsible-summary {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* Every collapsible body's contents scroll independently. */
+.collapsible-scroll-body,
+.collapsible-body {
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  flex: 1 1 auto;
+}
+
+/* Remove competing nested scroll limits from prior versions.
+   The panel body is now the one true scroll container. */
+#wallTypeLibraryList,
+.wall-type-scroll-list,
+.markups-table-wrap,
+.table-wrap {
+  max-height: none !important;
+}
+
+/* The markups table can still scroll horizontally inside its panel if needed. */
+.markups-table-wrap,
+.table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* Keep controls reachable in Selected Wall and Wall Type Library. */
+#selectedWallPanel .collapsible-scroll-body,
+#wallTypePanel .collapsible-scroll-body {
+  padding-bottom: 18px;
+}
+
+/* Slight visual cue that an open panel contains a scrollable body. */
+.collapsible-panel[open] > .collapsible-summary {
+  box-shadow: 0 1px 0 rgba(255,255,255,.04);
+}
+
+@media (max-width: 980px) {
+  .side-panel {
+    max-height: 42vh;
+    overflow-y: hidden !important;
+  }
+
+  .collapsible-panel[open] {
+    max-height: 34vh;
+  }
+}
+
+@media (max-width: 700px) {
+  .side-panel {
+    max-height: 38vh;
+    overflow-y: hidden !important;
+  }
+
+  .collapsible-panel[open] {
+    max-height: 30vh;
+  }
+
+  .collapsible-scroll-body,
+  .collapsible-body {
+    touch-action: pan-y;
+  }
+}
