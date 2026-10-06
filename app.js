@@ -534,6 +534,7 @@
     $("traceWallsBtn").classList.toggle("active-tool", state.toolMode === "trace");
     $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
     $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
+    $("traceLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
     if (state.toolMode !== "trace") return;
 
     const typeText = state.activeWallType ? ` • ${state.activeWallType}` : " • Unassigned";
@@ -663,6 +664,7 @@
     $("traceWallsBtn").classList.toggle("active-tool", traceActive);
     $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
     $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
+    $("traceLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
     $("selectedWallPanel").classList.toggle("tool-priority", wallActive || traceActive);
     $("calibrationPanel").classList.toggle("tool-priority", !wallActive);
 
@@ -882,6 +884,7 @@
     if (!seg) {
       $("wallForm").classList.add("hidden");
       $("selectionEmpty").classList.remove("hidden");
+      updateSelectedActionButtons();
       draw();
       return;
     }
@@ -922,8 +925,19 @@
       }
     }
     updateCalcPreview();
+    updateSelectedActionButtons();
     draw();
     updateMarkupSelectionHighlight();
+  }
+
+  function updateSelectedActionButtons() {
+    const hasSavedWall = !!state.selectedId && state.walls.has(state.selectedId);
+    $("findSelectedBtn").disabled = !hasSavedWall;
+    $("deleteSelectedBtn").disabled = !hasSavedWall;
+
+    const wall = hasSavedWall ? state.walls.get(state.selectedId) : null;
+    $("findSelectedBtn").title = wall ? `Find ${wall.wallNumber}` : "Select a saved wall first";
+    $("deleteSelectedBtn").title = wall ? `Delete ${wall.wallNumber}` : "Select a saved wall first";
   }
 
   function updateMarkupSelectionHighlight() {
@@ -1004,22 +1018,42 @@
 
   function focusWallSegment(id) {
     const seg = state.segments.find(s => s.id === id);
-    if (!seg) return;
+    const wall = state.walls.get(id);
+    if (!seg || !wall) return;
 
+    // Keep Trace Lock preference, but FIND itself switches interaction to WALL
+    // only for the selected markup; it does not delete or alter the trace chain.
+    const wasLocked = state.trace.locked;
     state.toolMode = "wall";
     state.trace.lastPoint = null;
-    selectSegment(id);
+    selectSegment(id, { preserveMode: true });
+    state.trace.locked = wasLocked;
 
     const rect = canvas.getBoundingClientRect();
+    const worldLength = Math.max(
+      Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1),
+      1e-9
+    );
+
+    // Put the selected wall at a useful Bluebeam-like viewing size:
+    // about 55% of the viewer's smaller dimension, but never zoom out
+    // below the current drawing-fit usability range unnecessarily.
+    const targetPixels = Math.max(180, Math.min(rect.width, rect.height) * 0.55);
+    const desiredScale = targetPixels / worldLength;
+
+    // Allow FIND to zoom in/out, but cap extreme zoom values.
+    state.view.scale = Math.max(0.00001, Math.min(1e7, desiredScale));
+
     const mx = (seg.x1 + seg.x2) / 2;
     const my = (seg.y1 + seg.y2) / 2;
     state.view.offsetX = rect.width / 2 - mx * state.view.scale;
     state.view.offsetY = rect.height / 2 + my * state.view.scale;
-    draw();
 
-    if (window.innerWidth <= 980) {
-      $("selectedWallPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    $("hintbar").textContent = `FOUND: ${wall.wallNumber}${wall.wallType ? ` • ${wall.wallType}` : ""}`;
+    updateToolUI();
+    updateTraceUI();
+    updateSelectedActionButtons();
+    draw();
   }
 
   function deleteWallById(id, ask = false) {
@@ -1043,6 +1077,7 @@
     }
 
     refreshTables();
+    updateSelectedActionButtons();
     draw();
   }
 
@@ -1093,7 +1128,7 @@
         <td>${escapeHtml(w.studSize)} ${escapeHtml(w.gauge)}</td>
         <td>${w.studQty}</td>
         <td class="markup-actions">
-          <button class="markup-locate" type="button" title="Locate wall">Locate</button>
+          <button class="markup-locate" type="button" title="Center wall in viewer">Find</button>
           <button class="markup-delete" type="button" title="Delete wall">Delete</button>
         </td>`;
 
@@ -1371,6 +1406,18 @@
     updateCalibrationUI();
   });
 
+  $("findSelectedBtn").addEventListener("click", () => {
+    if (state.selectedId && state.walls.has(state.selectedId)) {
+      focusWallSegment(state.selectedId);
+    }
+  });
+
+  $("deleteSelectedBtn").addEventListener("click", () => {
+    if (state.selectedId && state.walls.has(state.selectedId)) {
+      deleteWallById(state.selectedId, true);
+    }
+  });
+
   $("wallModeBtn").addEventListener("click", () => activateWallMode(true));
   $("traceWallsBtn").addEventListener("click", activateTraceMode);
   $("traceLockBtn").addEventListener("click", toggleTraceLock);
@@ -1427,6 +1474,18 @@
     refreshTables();
     selectSegment(null);
     draw();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    const typing = tag === "input" || tag === "textarea" || tag === "select";
+    if (typing) return;
+
+    if ((e.key === "Delete" || e.key === "Backspace") &&
+        state.selectedId && state.walls.has(state.selectedId)) {
+      e.preventDefault();
+      deleteWallById(state.selectedId, true);
+    }
   });
 
   canvas.addEventListener("wheel", (e) => {
@@ -1534,4 +1593,5 @@
   refreshTables();
   updateCalibrationUI();
   updateTraceUI();
+  updateSelectedActionButtons();
 })();

@@ -430,4 +430,165 @@ tbody tr:hover { background: #212630; }
     min-width: 690px;
   }
 }
-\n\n/* V1.8 — maximize plan view, scroll controls independently, trace reuse lock */\nhtml, body {\n  height: 100%;\n  height: 100dvh;\n  overflow: hidden;\n}\nbody {\n  display: flex;\n  flex-direction: column;\n}\n.topbar {\n  flex: 0 0 auto;\n}\n.app-grid {\n  flex: 1 1 auto;\n  min-height: 0;\n  height: auto;\n  overflow: hidden;\n  align-items: stretch;\n}\n.viewer-card {\n  height: 100%;\n  min-height: 0;\n}\n.viewer-toolbar {\n  min-height: 40px;\n  padding-top: 5px;\n  padding-bottom: 5px;\n}\n#canvasWrap {\n  flex: 1 1 auto;\n  min-height: 0;\n  height: auto;\n}\n.hintbar {\n  flex: 0 0 auto;\n  min-height: 21px;\n  padding: 2px 9px;\n  font-size: 9px;\n  line-height: 16px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.side-panel {\n  min-height: 0;\n  max-height: 100%;\n  overflow-y: auto;\n  overflow-x: hidden;\n  overscroll-behavior: contain;\n  -webkit-overflow-scrolling: touch;\n  padding-right: 4px;\n}\n.trace-lock-button.active-tool {\n  background: #ff9f43;\n  border-color: #ff9f43;\n  color: #1b1005;\n  font-weight: 800;\n}\n\n@media (max-width: 980px) {\n  .app-grid {\n    grid-template-columns: 1fr;\n    grid-template-rows: minmax(0, 66%) minmax(160px, 34%);\n    min-height: 0;\n  }\n  .viewer-card {\n    min-height: 0;\n  }\n  #canvasWrap {\n    min-height: 0;\n    height: auto;\n  }\n  .side-panel {\n    display: flex;\n    flex-direction: column;\n    max-height: none;\n    height: 100%;\n    overflow-y: auto;\n  }\n  .side-panel .panel:first-child {\n    grid-row: auto;\n  }\n}\n\n@media (max-width: 700px) {\n  .topbar {\n    position: static;\n  }\n  .app-grid {\n    grid-template-rows: minmax(0, 68%) minmax(145px, 32%);\n    padding: 6px;\n    gap: 6px;\n  }\n  .top-actions {\n    max-width: none;\n  }\n  .hintbar {\n    min-height: 19px;\n    padding: 1px 7px;\n    font-size: 8.5px;\n    line-height: 15px;\n  }\n}\n
+
+
+/* V1.8 — maximize plan view, scroll controls independently, trace reuse lock */
+html, body {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+body {
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  flex: 0 0 auto;
+}
+.app-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  align-items: stretch;
+}
+.viewer-card {
+  height: 100%;
+  min-height: 0;
+}
+.viewer-toolbar {
+  min-height: 40px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#canvasWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+.hintbar {
+  flex: 0 0 auto;
+  min-height: 21px;
+  padding: 2px 9px;
+  font-size: 9px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-panel {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+}
+.trace-lock-button.active-tool {
+  background: #ff9f43;
+  border-color: #ff9f43;
+  color: #1b1005;
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .app-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 66%) minmax(160px, 34%);
+    min-height: 0;
+  }
+  .viewer-card {
+    min-height: 0;
+  }
+  #canvasWrap {
+    min-height: 0;
+    height: auto;
+  }
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: none;
+    height: 100%;
+    overflow-y: auto;
+  }
+  .side-panel .panel:first-child {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    position: static;
+  }
+  .app-grid {
+    grid-template-rows: minmax(0, 68%) minmax(145px, 32%);
+    padding: 6px;
+    gap: 6px;
+  }
+  .top-actions {
+    max-width: none;
+  }
+  .hintbar {
+    min-height: 19px;
+    padding: 1px 7px;
+    font-size: 8.5px;
+    line-height: 15px;
+  }
+}
+
+
+/* V1.9 contextual Find/Delete controls */
+.mini-tool-button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid #3a414d;
+  background: #242933;
+  color: #e9eef5;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mini-tool-button:hover:not(:disabled) {
+  background: #303845;
+}
+
+.mini-tool-button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.delete-mini:not(:disabled) {
+  border-color: #743f42;
+  color: #ffd8d8;
+  background: #382426;
+}
+
+/* Trace Lock must be unmistakable when ON. */
+#traceLockBtn[aria-pressed="true"],
+#traceLockBtn.active-tool {
+  background: #35c46a !important;
+  border-color: #35c46a !important;
+  color: #07150c !important;
+  font-weight: 850 !important;
+  box-shadow: 0 0 0 2px rgba(53, 196, 106, .20);
+}
+
+#traceLockBtn[aria-pressed="false"] {
+  box-shadow: none;
+}
+
+@media (max-width: 700px) {
+  .toolbar-right {
+    gap: 5px;
+  }
+
+  .mini-tool-button {
+    min-height: 28px;
+    padding: 4px 6px;
+    font-size: 9px;
+  }
+}
