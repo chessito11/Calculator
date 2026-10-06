@@ -35,7 +35,7 @@
     toolMode: "wall",
     wallTypes: loadWallTypes(),
     activeWallType: "",
-    trace: { lastPoint: null },
+    trace: { lastPoint: null, locked: false },
     history: [],
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
@@ -532,14 +532,35 @@
 
   function updateTraceUI() {
     $("traceWallsBtn").classList.toggle("active-tool", state.toolMode === "trace");
+    $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
+    $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
     if (state.toolMode !== "trace") return;
 
-    const typeText = state.activeWallType ? ` — active type: ${state.activeWallType}` : " — active type: Unassigned";
+    const typeText = state.activeWallType ? ` • ${state.activeWallType}` : " • Unassigned";
+    const lockText = state.trace.locked ? " • LOCKED" : "";
     if (!state.trace.lastPoint) {
-      $("hintbar").textContent = `TRACE WALLS: Tap the first corner. Only DXF endpoints are used${typeText}.`;
+      $("hintbar").textContent = `TRACE: Tap first corner${typeText}${lockText}`;
     } else {
-      $("hintbar").textContent = `TRACE WALLS: Tap the next corner to create a wall. Keep tapping corner-to-corner${typeText}.`;
+      $("hintbar").textContent = `TRACE: Tap next corner${typeText}${lockText}`;
     }
+  }
+
+  function toggleTraceLock() {
+    if (!state.segments.length) {
+      alert("Open a DXF drawing first.");
+      return;
+    }
+    state.trace.locked = !state.trace.locked;
+    if (state.trace.locked) {
+      state.toolMode = "trace";
+      state.calibration.activePoint = null;
+      hideCalibrationPanel();
+      closeMoreMenu();
+      if (!state.trace.lastPoint) state.selectedId = null;
+    }
+    updateToolUI();
+    updateTraceUI();
+    draw();
   }
 
   function activateTraceMode() {
@@ -549,7 +570,13 @@
     }
     if (state.toolMode === "trace") {
       state.trace.lastPoint = null;
-      activateWallMode(false);
+      if (state.trace.locked) {
+        updateToolUI();
+        updateTraceUI();
+        draw();
+      } else {
+        activateWallMode(false);
+      }
       return;
     }
     state.toolMode = "trace";
@@ -567,7 +594,7 @@
   function traceWallPoint(screenX, screenY) {
     const point = nearestWallEndpoint(screenX, screenY);
     if (!point) {
-      $("hintbar").textContent = "TRACE WALLS: No DXF corner found there. Tap closer to the corner/end point you want.";
+      $("hintbar").textContent = "TRACE: No corner — tap closer to an endpoint.";
       return;
     }
 
@@ -581,7 +608,7 @@
     const a = state.trace.lastPoint;
     const b = point;
     if (rawPointDistance(a, b) < 1e-9) {
-      $("hintbar").textContent = "TRACE WALLS: Choose a different corner for the next wall.";
+      $("hintbar").textContent = "TRACE: Choose a different corner.";
       return;
     }
 
@@ -604,7 +631,13 @@
       $("wallTypeSelect").value = "";
     }
     saveWallFromForm({ preserveMode: true, skipHistory: true });
-    state.toolMode = "trace";
+    if (state.trace.locked) {
+      state.toolMode = "trace";
+      state.trace.lastPoint = { x: b.x, y: b.y };
+    } else {
+      state.toolMode = "wall";
+      state.trace.lastPoint = null;
+    }
     updateToolUI();
     updateTraceUI();
     draw();
@@ -628,6 +661,8 @@
     const traceActive = state.toolMode === "trace";
     $("wallModeBtn").classList.toggle("active-tool", wallActive);
     $("traceWallsBtn").classList.toggle("active-tool", traceActive);
+    $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
+    $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
     $("selectedWallPanel").classList.toggle("tool-priority", wallActive || traceActive);
     $("calibrationPanel").classList.toggle("tool-priority", !wallActive);
 
@@ -640,6 +675,7 @@
 
   function activateWallMode(scrollPanel = false) {
     state.toolMode = "wall";
+    state.trace.locked = false;
     state.trace.lastPoint = null;
     state.calibration.activePoint = null;
     hideCalibrationPanel();
@@ -681,21 +717,21 @@
 
     if (cal.activePoint === 0) {
       status.textContent = "Scale 1 is active. Tap the first point of the known dimension.";
-      hint.textContent = "SCALE 1 ACTIVE: Tap point 1. Drag to pan or pinch to zoom.";
+      hint.textContent = "SCALE 1: Tap first point";
     } else if (cal.activePoint === 1) {
       status.textContent = "Scale 2 is active. Tap the second point of the known dimension.";
-      hint.textContent = "SCALE 2 ACTIVE: Tap point 2. Drag to pan or pinch to zoom.";
+      hint.textContent = "SCALE 2: Tap second point";
     } else if (hasBoth) {
       status.textContent = cal.feetPerUnit
         ? "Scale 1 and Scale 2 are set. Change the known dimension or either point and Apply again if needed."
         : "Both scale points are set. Enter the known dimension and press Apply Calibration.";
-      hint.textContent = "Tap a line to select it. Scale 1 and Scale 2 can be reset independently.";
+      hint.textContent = "Scale set • WALL to continue";
     } else if (has1 || has2) {
       status.textContent = "One scale point is set. Activate the other Scale button and tap its point.";
-      hint.textContent = "Set the remaining scale point, or tap a wall line when no Scale button is active.";
+      hint.textContent = "Set remaining scale point";
     } else {
       status.textContent = "Set Scale 1 and Scale 2 on a known dimension, then enter the real distance.";
-      hint.textContent = "Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.";
+      hint.textContent = "Tap wall • Drag pan • Pinch zoom";
     }
 
     if (cal.feetPerUnit) {
@@ -718,6 +754,7 @@
       return;
     }
     state.toolMode = "scale";
+    state.trace.locked = false;
     state.trace.lastPoint = null;
     showCalibrationPanel();
     closeMoreMenu();
@@ -1336,6 +1373,7 @@
 
   $("wallModeBtn").addEventListener("click", () => activateWallMode(true));
   $("traceWallsBtn").addEventListener("click", activateTraceMode);
+  $("traceLockBtn").addEventListener("click", toggleTraceLock);
   $("scale1Btn").addEventListener("click", () => activateScalePoint(0));
   $("scale2Btn").addEventListener("click", () => activateScalePoint(1));
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);

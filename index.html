@@ -18,6 +18,7 @@
       <input id="dxfFile" type="file" hidden>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
+      <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">TRACE LOCK</button>
 
       <details id="moreMenu" class="more-menu">
         <summary class="button more-summary">More ▾</summary>
@@ -66,9 +67,7 @@
         </div>
       </div>
 
-      <div id="hintbar" class="hintbar">
-        Tap a line to select it. Drag to pan. Pinch or mouse-wheel to zoom.
-      </div>
+      <div id="hintbar" class="hintbar">Tap wall • Drag pan • Pinch zoom</div>
     </section>
 
     <aside class="side-panel">
