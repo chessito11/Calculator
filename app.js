@@ -27,6 +27,10 @@
 
   const state = {
     fileName: "",
+    projectName: "",
+    savedProjectId: null,
+    projectDirty: false,
+    fullscreenFallback: false,
     segments: [],
     selectedId: null,
     walls: new Map(),
@@ -435,9 +439,24 @@
     updateCalcPreview();
   }
 
+  function updateCurrentTypeBadge() {
+    const name = state.activeWallType || "Unassigned";
+    const el = $("currentTypeBadge");
+    el.textContent = `TYPE: ${name}`;
+    const t = state.wallTypes[state.activeWallType];
+    el.title = t
+      ? `${name} • ${t.studSize} ${t.gauge} @ ${t.spacing}" O.C. • Height ${t.height}'`
+      : "No saved wall type selected; trace walls will be unassigned.";
+    el.classList.toggle("type-assigned", !!t);
+    $("fsCurrentTypeBadge").textContent = `TYPE: ${name}`;
+    $("fsCurrentTypeBadge").title = el.title;
+    $("fsCurrentTypeBadge").classList.toggle("type-assigned", !!t);
+  }
+
   function setActiveWallType(name, applyToCurrent = false) {
     state.activeWallType = name && state.wallTypes[name] ? name : "";
     $("activeWallTypeSelect").value = state.activeWallType;
+    updateCurrentTypeBadge();
 
     if (applyToCurrent && state.selectedId) {
       $("wallTypeSelect").value = state.activeWallType;
@@ -464,6 +483,7 @@
       select.value = names.includes(current) ? current : "";
     }
 
+    updateCurrentTypeBadge();
     $("wallTypeCountBadge").textContent = `${names.length} type${names.length === 1 ? "" : "s"}`;
 
     const list = $("wallTypeLibraryList");
@@ -505,6 +525,7 @@
     state.wallTypes[name] = wallTemplateFromForm();
     persistWallTypes();
     state.activeWallType = name;
+    markProjectDirty();
     refreshWallTypeUI();
     setActiveWallType(name, !!state.selectedId);
     if (state.selectedId) $("wallTypeSelect").value = name;
@@ -518,6 +539,7 @@
     }
     if (!confirm(`Delete wall type ${name}? Existing walls keep their saved takeoff data.`)) return;
     delete state.wallTypes[name];
+    markProjectDirty();
     if (state.activeWallType === name) state.activeWallType = "";
     persistWallTypes();
     $("wallTypeName").value = "";
@@ -535,6 +557,7 @@
     $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
     $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
     $("traceLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
+    syncFullscreenTools();
     if (state.toolMode !== "trace") return;
 
     const typeText = state.activeWallType ? ` • ${state.activeWallType}` : " • Unassigned";
@@ -665,6 +688,7 @@
     $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
     $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
     $("traceLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
+    syncFullscreenTools();
     $("selectedWallPanel").classList.toggle("tool-priority", wallActive || traceActive);
     $("calibrationPanel").classList.toggle("tool-priority", !wallActive);
 
@@ -788,6 +812,7 @@
       alert("Scale 1 and Scale 2 are too close together.");
       return;
     }
+    markProjectDirty();
     state.calibration.feetPerUnit = actualFeet / raw;
     state.calibration.activePoint = null;
     state.toolMode = "wall";
@@ -797,6 +822,7 @@
   }
 
   function resetCalibration() {
+    markProjectDirty();
     state.calibration.activePoint = null;
     state.calibration.points = [null, null];
     state.calibration.feetPerUnit = null;
@@ -983,6 +1009,7 @@
   }
 
   function pushTakeoffHistory() {
+    markProjectDirty();
     state.history.push(snapshotTakeoff());
     if (state.history.length > 50) state.history.shift();
     updateUndoButton();
@@ -996,6 +1023,7 @@
   }
 
   function undoLastTakeoff() {
+    markProjectDirty();
     const snap = state.history.pop();
     if (!snap) return;
 
@@ -1341,6 +1369,387 @@
     URL.revokeObjectURL(url);
   }
 
+  // Projects are stored in IndexedDB (larger drawings than localStorage can usually handle).
+  // Downloadable .atlas-takeoff.json backup is the portable, user-controlled copy.
+  const PROJECT_DB_NAME = "ATLAS_Takeoff_Projects";
+  const PROJECT_STORE = "projects";
+  const LAST_PROJECT_KEY = "atlasTakeoffLastProjectV2";
+  let projectDbPromise = null;
+  let restoringProject = false;
+
+  function markProjectDirty() {
+    if (restoringProject || !state.segments.length) return;
+    state.projectDirty = true;
+    updateProjectTitle();
+  }
+
+  function updateProjectTitle() {
+    const title = state.projectName || state.fileName || "Untitled project";
+    document.title = `${state.projectDirty ? "• " : ""}${title} — ATLAS Takeoff`;
+    $("saveProjectBtn").textContent = state.projectDirty ? "Save Project *" : "Save Project";
+  }
+
+  function getProjectSnapshot(name = state.projectName || state.fileName.replace(/\.dxf$/i, "") || "New Project") {
+    return {
+      app: "ATLAS Takeoff", version: 2,
+      projectName: String(name).trim(),
+      fileName: state.fileName,
+      savedAt: new Date().toISOString(),
+      segments: state.segments.map(s => ({ ...s })),
+      walls: [...state.walls.values()].map(w => ({ ...w })),
+      wallTypes: structuredClone(state.wallTypes),
+      activeWallType: state.activeWallType,
+      detectedUnits: state.detectedUnits,
+      unitSelect: $("unitSelect").value,
+      calibration: {
+        points: state.calibration.points,
+        feetPerUnit: state.calibration.feetPerUnit,
+        knownFeet: $("calibrationFeet").value,
+        knownInches: $("calibrationInches").value
+      },
+      view: { ...state.view },
+      selectedId: state.selectedId,
+      traceLocked: state.trace.locked
+    };
+  }
+
+  function assertProject(data) {
+    if (!data || data.app !== "ATLAS Takeoff" || data.version !== 2 ||
+        !Array.isArray(data.segments) || !Array.isArray(data.walls) ||
+        !data.segments.every(s => Number.isFinite(s.x1) && Number.isFinite(s.y1) &&
+            Number.isFinite(s.x2) && Number.isFinite(s.y2) && Number.isSafeInteger(s.id)) ||
+        !data.walls.every(w => Number.isSafeInteger(w.segmentId) &&
+            typeof w.wallNumber === "string")) {
+      throw new Error("Not a valid ATLAS Takeoff v2 project backup.");
+    }
+    return data;
+  }
+
+  function projectDb() {
+    if (!window.indexedDB) return Promise.reject(new Error("Saved projects are unavailable in this browser. Use Download Backup instead."));
+    if (projectDbPromise) return projectDbPromise;
+    projectDbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(PROJECT_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(PROJECT_STORE))
+          req.result.createObjectStore(PROJECT_STORE, { keyPath: "id" });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("Could not open saved-project storage."));
+    }).catch(err => { projectDbPromise = null; throw err; });
+    return projectDbPromise;
+  }
+
+  async function projectOperation(mode, value) {
+    const db = await projectDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(PROJECT_STORE, mode === "put" || mode === "delete" ? "readwrite" : "readonly");
+      const store = tx.objectStore(PROJECT_STORE);
+      let req;
+      if (mode === "put") req = store.put(value);
+      else if (mode === "delete") req = store.delete(value);
+      else if (mode === "get") req = store.get(value);
+      else req = store.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("Project storage request failed."));
+      tx.onabort = () => reject(tx.error || new Error("Project storage failed or is full."));
+    });
+  }
+
+  function setProjectStatus(message, error = false) {
+    $("projectStorageStatus").textContent = message;
+    $("projectStorageStatus").classList.toggle("error", error);
+  }
+
+  function projectIdFromName(name) {
+    return name.trim().toLowerCase();
+  }
+
+  async function refreshSavedProjectsList() {
+    const list = $("savedProjectsList");
+    list.textContent = "Loading saved projects…";
+    try {
+      const items = await projectOperation("list");
+      items.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
+      list.replaceChildren();
+      if (!items.length) {
+        list.textContent = "No saved projects on this device yet.";
+        return;
+      }
+      for (const item of items) {
+        const row = document.createElement("div");
+        row.className = "project-saved-row";
+        const info = document.createElement("div");
+        const strong = document.createElement("strong");
+        strong.textContent = item.projectName;
+        const detail = document.createElement("small");
+        detail.textContent = `${item.walls.length} walls • ${new Date(item.savedAt).toLocaleString()}`;
+        info.append(strong, detail);
+        const open = document.createElement("button");
+        open.className = "button";
+        open.type = "button";
+        open.textContent = "Open";
+        open.addEventListener("click", () => openSavedProject(item.id));
+        const remove = document.createElement("button");
+        remove.className = "button danger";
+        remove.type = "button";
+        remove.textContent = "Delete";
+        remove.addEventListener("click", async () => {
+          if (!confirm(`Delete saved project “${item.projectName}” from this device?`)) return;
+          try {
+            await projectOperation("delete", item.id);
+            if (state.savedProjectId === item.id) {
+              state.savedProjectId = null;
+              state.projectDirty = true;
+              updateProjectTitle();
+            }
+            if (localStorage.getItem(LAST_PROJECT_KEY) === item.id) localStorage.removeItem(LAST_PROJECT_KEY);
+            await refreshSavedProjectsList();
+          } catch (err) { setProjectStatus(err.message, true); }
+        });
+        row.append(info, open, remove);
+        list.appendChild(row);
+      }
+    } catch (err) {
+      list.textContent = "Local saves are unavailable; use Download Backup to keep this project.";
+      setProjectStatus(err.message, true);
+    }
+  }
+
+  function showProjectDialog(preferSave = false) {
+    $("projectDialog").classList.remove("hidden");
+    $("projectNameInput").value = state.projectName || state.fileName.replace(/\.dxf$/i, "");
+    $("projectStorageStatus").textContent = "";
+    refreshSavedProjectsList();
+    if (preferSave) $("projectNameInput").focus();
+  }
+
+  function closeProjectDialog() { $("projectDialog").classList.add("hidden"); }
+
+  async function saveCurrentProject() {
+    if (!state.segments.length) { alert("Open a DXF before saving a project."); return; }
+    const name = $("projectNameInput").value.trim();
+    if (!name) { setProjectStatus("Give this project a name before saving.", true); return; }
+    const id = projectIdFromName(name);
+    try {
+      const existing = await projectOperation("get", id);
+      if (existing && state.savedProjectId !== id &&
+          !confirm(`Replace the existing saved project “${existing.projectName}”?`)) return;
+      const data = getProjectSnapshot(name);
+      await projectOperation("put", { ...data, id });
+      state.projectName = name;
+      state.savedProjectId = id;
+      state.projectDirty = false;
+      updateProjectTitle();
+      localStorage.setItem(LAST_PROJECT_KEY, id);
+      setProjectStatus(`Saved “${name}” with ${data.walls.length} walls and the complete drawing.`);
+      await refreshSavedProjectsList();
+    } catch (err) {
+      setProjectStatus(`Couldn't save locally: ${err.message} Download a backup instead.`, true);
+    }
+  }
+
+  function confirmDiscardUnsaved() {
+    return !state.projectDirty || !state.segments.length ||
+      confirm("You have unsaved changes. Open another project and discard those changes?");
+  }
+
+  function restoreProject(data, id = null) {
+    const p = assertProject(data);
+    restoringProject = true;
+    try {
+      state.fileName = p.fileName || "Saved project";
+      state.projectName = p.projectName || "Imported project";
+      state.savedProjectId = id;
+      state.projectDirty = false;
+      state.segments = p.segments.map(s => ({ ...s }));
+      state.walls = new Map(p.walls.map(w => [w.segmentId, { ...w }]));
+      state.wallTypes = { ...state.wallTypes, ...(p.wallTypes || {}) };
+      persistWallTypes();
+      state.activeWallType = p.activeWallType && state.wallTypes[p.activeWallType] ? p.activeWallType : "";
+      state.detectedUnits = p.detectedUnits || null;
+      const validUnits = ["auto", "in", "ft", "mm", "cm", "m"];
+      $("unitSelect").value = validUnits.includes(p.unitSelect) ? p.unitSelect : "auto";
+      state.calibration = {
+        activePoint: null,
+        points: Array.isArray(p.calibration?.points) && p.calibration.points.length === 2
+          ? p.calibration.points : [null, null],
+        feetPerUnit: Number.isFinite(p.calibration?.feetPerUnit) && p.calibration.feetPerUnit > 0
+          ? p.calibration.feetPerUnit : null
+      };
+      $("calibrationFeet").value = p.calibration?.knownFeet ?? "20";
+      $("calibrationInches").value = p.calibration?.knownInches ?? "0";
+      state.trace = { locked: !!p.traceLocked, lastPoint: null };
+      state.toolMode = state.trace.locked ? "trace" : "wall";
+      state.history = [];
+      state.bounds = computeBounds(state.segments);
+      state.selectedId = null;
+      $("emptyState").style.display = state.segments.length ? "none" : "flex";
+      $("fileStatus").textContent = `${state.fileName} • ${state.segments.length.toLocaleString()} segments`;
+      refreshWallTypeUI();
+      setActiveWallType(state.activeWallType);
+      refreshTables();
+      selectSegment(null, { preserveMode: true });
+      hideCalibrationPanel();
+      updateCalibrationUI();
+      updateToolUI();
+      updateTraceUI();
+      updateSelectedActionButtons();
+      updateProjectTitle();
+      if (p.view && Number.isFinite(p.view.scale) && p.view.scale > 0 &&
+          Number.isFinite(p.view.offsetX) && Number.isFinite(p.view.offsetY)) {
+        state.view = { ...p.view };
+        resizeCanvas();
+      } else fitDrawing();
+    } finally { restoringProject = false; }
+  }
+
+  async function openSavedProject(id) {
+    if (!confirmDiscardUnsaved()) return;
+    try {
+      const data = await projectOperation("get", id);
+      if (!data) { setProjectStatus("This saved project is no longer available.", true); return; }
+      restoreProject(data, id);
+      localStorage.setItem(LAST_PROJECT_KEY, id);
+      closeProjectDialog();
+    } catch (err) { setProjectStatus(err.message, true); }
+  }
+
+  function downloadProjectBackup() {
+    if (!state.segments.length) { alert("Open a DXF before downloading a project backup."); return; }
+    const name = $("projectNameInput").value.trim() || state.projectName || state.fileName.replace(/\.dxf$/i, "") || "takeoff";
+    const json = JSON.stringify(getProjectSnapshot(name));
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${name.replace(/[^a-z0-9_-]+/gi, "-")}.atlas-takeoff.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setProjectStatus(`Downloaded backup for “${name}”. Keep it somewhere safe.`);
+  }
+
+  async function importProjectBackup(file) {
+    if (!file || !confirmDiscardUnsaved()) return;
+    try {
+      const data = assertProject(JSON.parse(await file.text()));
+      restoreProject(data, null);
+      state.projectDirty = true; // Imported file still needs to be saved to local slots.
+      updateProjectTitle();
+      closeProjectDialog();
+      alert(`Imported “${state.projectName}”. Use Save Project to keep it in this browser.`);
+    } catch (err) { alert(`Could not import project: ${err.message}`); }
+  }
+
+  async function autoRestoreLastSaved() {
+    let id;
+    try { id = localStorage.getItem(LAST_PROJECT_KEY); } catch (_) { return; }
+    if (!id || state.segments.length) return;
+    try {
+      const data = await projectOperation("get", id);
+      if (data && !state.segments.length) restoreProject(data, id);
+    } catch (_) { /* User can still open/import manually. */ }
+  }
+
+  // Viewer fullscreen: use native Fullscreen API where supported, CSS fallback for iPad Safari.
+  const viewerCard = document.querySelector(".viewer-card");
+  let fullscreenCenter = null;
+  function isViewerFullscreen() {
+    return document.fullscreenElement === viewerCard || state.fullscreenFallback;
+  }
+
+  function captureViewerCenter() {
+    const rect = canvas.getBoundingClientRect();
+    return rect.width && rect.height
+      ? screenToWorld(rect.width / 2, rect.height / 2)
+      : null;
+  }
+
+  function reflowViewerAfterModeChange() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const rect = canvas.getBoundingClientRect();
+      if (fullscreenCenter && rect.width && rect.height) {
+        state.view.offsetX = rect.width / 2 - fullscreenCenter.x * state.view.scale;
+        state.view.offsetY = rect.height / 2 + fullscreenCenter.y * state.view.scale;
+      }
+      fullscreenCenter = null;
+      resizeCanvas();
+      syncFullscreenTools();
+    }));
+  }
+
+  function syncFullscreenTools() {
+    const active = isViewerFullscreen();
+    $("fullscreenBtn").textContent = active ? "⛶ EXIT FULL SCREEN" : "⛶ FULL SCREEN";
+    $("fullscreenBtn").setAttribute("aria-pressed", active ? "true" : "false");
+    $("fsWallBtn").classList.toggle("active-tool", state.toolMode === "wall");
+    $("fsTraceBtn").classList.toggle("active-tool", state.toolMode === "trace");
+    $("fsLockBtn").classList.toggle("trace-on", state.trace.locked);
+    $("fsLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
+  }
+
+  async function toggleViewerFullscreen() {
+    fullscreenCenter = captureViewerCenter();
+    if (isViewerFullscreen()) {
+      if (document.fullscreenElement === viewerCard) {
+        try { await document.exitFullscreen(); } catch (_) { /* keep fallback below */ }
+      }
+      state.fullscreenFallback = false;
+      viewerCard.classList.remove("fullscreen-fallback");
+      reflowViewerAfterModeChange();
+      return;
+    }
+    if (viewerCard.requestFullscreen) {
+      try {
+        await viewerCard.requestFullscreen();
+        reflowViewerAfterModeChange();
+        return;
+      } catch (_) { /* iOS Safari can reject element fullscreen */ }
+    }
+    state.fullscreenFallback = true;
+    viewerCard.classList.add("fullscreen-fallback");
+    reflowViewerAfterModeChange();
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement) state.fullscreenFallback = false;
+    reflowViewerAfterModeChange();
+  });
+
+  $("fullscreenBtn").addEventListener("click", toggleViewerFullscreen);
+  $("fsExitBtn").addEventListener("click", toggleViewerFullscreen);
+  $("fsWallBtn").addEventListener("click", () => activateWallMode(false));
+  $("fsTraceBtn").addEventListener("click", activateTraceMode);
+  $("fsLockBtn").addEventListener("click", toggleTraceLock);
+  $("fsFitBtn").addEventListener("click", fitDrawing);
+  $("saveProjectBtn").addEventListener("click", () => showProjectDialog(true));
+  $("openProjectBtn").addEventListener("click", () => showProjectDialog(false));
+  $("closeProjectDialogBtn").addEventListener("click", closeProjectDialog);
+  $("projectDialog").addEventListener("click", e => {
+    if (e.target === $("projectDialog")) closeProjectDialog();
+  });
+  $("confirmSaveProjectBtn").addEventListener("click", saveCurrentProject);
+  $("backupProjectBtn").addEventListener("click", () => { closeMoreMenu(); showProjectDialog(true); downloadProjectBackup(); });
+  $("dialogBackupProjectBtn").addEventListener("click", downloadProjectBackup);
+  $("importProjectBtn").addEventListener("click", () => {
+    closeMoreMenu();
+    $("projectImportFile").value = "";
+    $("projectImportFile").click();
+  });
+  $("projectImportFile").addEventListener("change", e => importProjectBackup(e.target.files?.[0]));
+  window.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("projectDialog").classList.contains("hidden")) closeProjectDialog();
+    if (e.key === "Escape" && state.fullscreenFallback) toggleViewerFullscreen();
+  });
+  window.addEventListener("beforeunload", e => {
+    if (state.projectDirty && state.segments.length) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
   document.addEventListener("pointerdown", (e) => {
     const menu = $("moreMenu");
     if (menu && menu.open && !menu.contains(e.target)) {
@@ -1363,10 +1772,21 @@
       return;
     }
 
+    if (!confirmDiscardUnsaved()) {
+      e.target.value = "";
+      return;
+    }
+    if (state.projectDirty && state.segments.length &&
+        !confirm("Open a different DXF? Unsaved takeoff changes will be lost.")) return;
+
     const text = await file.text();
     const parsed = parseDXF(text);
 
     state.fileName = file.name;
+    state.projectName = file.name.replace(/\.dxf$/i, "");
+    state.savedProjectId = null;
+    state.projectDirty = true;
+    updateProjectTitle();
     state.segments = parsed.segments;
     state.detectedUnits = parsed.detectedUnits;
     state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
@@ -1397,6 +1817,7 @@
     closeMoreMenu();
   });
   $("unitSelect").addEventListener("change", () => {
+    markProjectDirty();
     if (state.calibration.feetPerUnit) {
       state.calibration.feetPerUnit = null;
       state.calibration.points = [null, null];
@@ -1428,6 +1849,7 @@
   $("resetCalibrationBtn").addEventListener("click", resetCalibration);
 
   $("activeWallTypeSelect").addEventListener("change", (e) => {
+    markProjectDirty();
     setActiveWallType(e.target.value, false);
     updateTraceUI();
   });
@@ -1437,6 +1859,7 @@
     if (name && state.wallTypes[name]) {
       state.activeWallType = name;
       $("activeWallTypeSelect").value = name;
+      updateCurrentTypeBadge();
       $("wallTypeName").value = name;
       applyWallTemplate(state.wallTypes[name]);
     }
@@ -1594,4 +2017,8 @@
   updateCalibrationUI();
   updateTraceUI();
   updateSelectedActionButtons();
+  updateCurrentTypeBadge();
+  updateProjectTitle();
+  syncFullscreenTools();
+  autoRestoreLastSaved();
 })();

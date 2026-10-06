@@ -15,14 +15,17 @@
     </div>
     <div class="top-actions">
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
+      <button id="saveProjectBtn" class="button" type="button">Save Project</button>
       <input id="dxfFile" type="file" hidden>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
       <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">TRACE LOCK</button>
+      <span id="currentTypeBadge" class="current-type-badge" role="status" aria-live="polite" title="Current wall type for new traced walls">TYPE: Unassigned</span>
 
       <details id="moreMenu" class="more-menu">
         <summary class="button more-summary">More ▾</summary>
         <div class="more-menu-panel">
+          <button id="openProjectBtn" class="button" type="button">Open Saved Project</button>
           <button id="fitBtn" class="button" type="button">Fit Drawing</button>
           <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
           <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
@@ -39,6 +42,9 @@
           </label>
 
           <button id="exportCsvBtn" class="button" type="button">Export CSV</button>
+          <button id="backupProjectBtn" class="button" type="button">Download Project Backup</button>
+          <button id="importProjectBtn" class="button" type="button">Import Project Backup</button>
+          <input id="projectImportFile" type="file" hidden>
         </div>
       </details>
     </div>
@@ -56,11 +62,21 @@
           </label>
           <button id="findSelectedBtn" class="mini-tool-button" type="button" disabled>FIND</button>
           <button id="deleteSelectedBtn" class="mini-tool-button delete-mini" type="button" disabled>DELETE</button>
+          <button id="fullscreenBtn" class="mini-tool-button fullscreen-main" type="button" aria-pressed="false">⛶ FULL SCREEN</button>
           <span id="scaleBadge" class="badge">Scale: DXF units</span>
           <span id="wallCountBadge" class="badge">0 walls</span>
         </div>
       </div>
 
+      <div id="fullScreenTools" class="fullscreen-tools" aria-label="Full-screen wall tools">
+        <button id="fsWallBtn" class="button" type="button">WALL</button>
+        <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
+        <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
+        <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
+        <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
+        <button id="fsFitBtn" class="button" type="button">Fit</button>
+        <button id="fsExitBtn" class="button" type="button">Exit Full Screen</button>
+      </div>
       <div id="canvasWrap">
         <canvas id="dxfCanvas"></canvas>
         <div id="emptyState" class="empty-state">
@@ -278,6 +294,25 @@
     </aside>
   </main>
 
+  <div id="projectDialog" class="project-modal hidden" role="dialog" aria-modal="true" aria-labelledby="projectDialogTitle">
+    <div class="project-dialog-card">
+      <div class="panel-heading">
+        <h2 id="projectDialogTitle">Projects</h2>
+        <button id="closeProjectDialogBtn" class="button" type="button">✕</button>
+      </div>
+      <div class="muted project-note">Saved on this browser/device. Download a backup to keep a portable copy.</div>
+      <label>Project name
+        <input id="projectNameInput" type="text" maxlength="100" placeholder="Example: Macon - Building A" autocomplete="off">
+      </label>
+      <div class="project-dialog-actions">
+        <button id="confirmSaveProjectBtn" class="button primary" type="button">Save Current Project</button>
+        <button id="dialogBackupProjectBtn" class="button" type="button">Download Backup</button>
+      </div>
+      <div id="projectStorageStatus" class="project-storage-status muted" role="status" aria-live="polite"></div>
+      <div class="project-list-heading">Saved projects</div>
+      <div id="savedProjectsList" class="saved-projects-list"></div>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>
