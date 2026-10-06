@@ -1899,6 +1899,87 @@
     }
   });
 
+
+  function initializeCollapsiblePanelScrolling() {
+    const bodies = document.querySelectorAll(".panel-scroll-body");
+
+    bodies.forEach((body) => {
+      const up = body.querySelector(".panel-scroll-up");
+      const down = body.querySelector(".panel-scroll-down");
+
+      const scrollAmount = () => Math.max(120, Math.round(body.clientHeight * 0.72));
+
+      if (up) {
+        up.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          body.scrollBy({ top: -scrollAmount(), behavior: "smooth" });
+        });
+      }
+
+      if (down) {
+        down.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          body.scrollBy({ top: scrollAmount(), behavior: "smooth" });
+        });
+      }
+
+      // Explicit wheel handling prevents the parent options column from
+      // stealing wheel movement when this panel can still scroll.
+      body.addEventListener("wheel", (e) => {
+        const max = body.scrollHeight - body.clientHeight;
+        if (max <= 0) return;
+
+        const movingDown = e.deltaY > 0;
+        const movingUp = e.deltaY < 0;
+        const canMoveDown = body.scrollTop < max - 1;
+        const canMoveUp = body.scrollTop > 1;
+
+        if ((movingDown && canMoveDown) || (movingUp && canMoveUp)) {
+          e.preventDefault();
+          e.stopPropagation();
+          body.scrollTop += e.deltaY;
+        }
+      }, { passive: false });
+
+      // Safari/iPad fallback: translate finger movement directly to scrollTop.
+      let touchY = null;
+
+      body.addEventListener("touchstart", (e) => {
+        if (!e.touches || !e.touches.length) return;
+        touchY = e.touches[0].clientY;
+      }, { passive: true });
+
+      body.addEventListener("touchmove", (e) => {
+        if (touchY === null || !e.touches || !e.touches.length) return;
+
+        const y = e.touches[0].clientY;
+        const dy = touchY - y;
+        const max = body.scrollHeight - body.clientHeight;
+
+        if (max > 0) {
+          const next = Math.max(0, Math.min(max, body.scrollTop + dy));
+          if (next !== body.scrollTop) {
+            e.preventDefault();
+            e.stopPropagation();
+            body.scrollTop = next;
+          }
+        }
+
+        touchY = y;
+      }, { passive: false });
+
+      body.addEventListener("touchend", () => {
+        touchY = null;
+      }, { passive: true });
+
+      body.addEventListener("touchcancel", () => {
+        touchY = null;
+      }, { passive: true });
+    });
+  }
+
   document.addEventListener("pointerdown", (e) => {
     const menu = $("moreMenu");
     if (menu && menu.open && !menu.contains(e.target)) {
@@ -2181,6 +2262,7 @@
   window.addEventListener("resize", resizeCanvas);
   resizeCanvas();
   refreshWallTypeUI();
+  initializeCollapsiblePanelScrolling();
   refreshTables();
   updateCalibrationUI();
   updateTraceUI();

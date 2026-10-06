@@ -878,41 +878,107 @@ body {
   }
 }
 
-/* V2.5 stable scrolling fix */
-.panel-scroll-body{
-  max-height:300px;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;
-  touch-action:pan-y;
-  padding-right:4px;
+
+/* V2.6 — guaranteed scrolling for ALL collapsible tabs
+   Built on the stable v2.3 panel structure. */
+
+.panel-scroll-body {
+  position: relative;
+  height: 300px;
+  min-height: 120px;
+  overflow-y: scroll !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  padding-right: 5px;
 }
+
+/* Do not create a second vertical scroller inside Markups or Wall Types. */
 .panel-scroll-body .table-wrap,
-.panel-scroll-body .markups-table-wrap{
-  max-height:none !important;
-  overflow-x:auto;
-  overflow-y:visible;
+.panel-scroll-body .markups-table-wrap {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: auto;
 }
+
 #wallTypeLibraryList,
-.wall-type-scroll-list{
-  max-height:none !important;
-  overflow-y:visible !important;
-  overflow-x:hidden;
-  padding-right:0;
+.wall-type-scroll-list {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: hidden;
+  padding-right: 0;
 }
-#selectedWallPanel .panel-scroll-body{max-height:360px;}
-#wallTypePanel .panel-scroll-body{max-height:330px;}
-#markupsPanel .panel-scroll-body{max-height:340px;}
-@media (max-width:980px){
-  .panel-scroll-body{max-height:250px;}
-  #selectedWallPanel .panel-scroll-body{max-height:280px;}
+
+/* Selected Wall benefits from a bit more room. */
+#selectedWallPanel .panel-scroll-body {
+  height: 360px;
+}
+
+#wallTypePanel .panel-scroll-body {
+  height: 330px;
+}
+
+#markupsPanel .panel-scroll-body {
+  height: 350px;
+}
+
+/* Small sticky fallback arrows: useful on iPad if swipe scrolling is finicky. */
+.panel-scroll-controls {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  pointer-events: none;
+  height: 0;
+  overflow: visible;
+}
+
+.panel-scroll-controls button {
+  pointer-events: auto;
+  width: 30px;
+  height: 26px;
+  border: 1px solid #46505d;
+  border-radius: 6px;
+  background: rgba(23, 26, 32, .94);
+  color: #e8edf3;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.28);
+}
+
+.panel-scroll-controls button:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 980px) {
+  .panel-scroll-body {
+    height: 245px;
+  }
+
+  #selectedWallPanel .panel-scroll-body {
+    height: 280px;
+  }
+
   #wallTypePanel .panel-scroll-body,
-  #markupsPanel .panel-scroll-body{max-height:260px;}
+  #markupsPanel .panel-scroll-body {
+    height: 260px;
+  }
 }
-@media (max-width:700px){
-  .panel-scroll-body{max-height:220px;}
+
+@media (max-width: 700px) {
+  .panel-scroll-body {
+    height: 215px;
+  }
+
   #selectedWallPanel .panel-scroll-body,
   #wallTypePanel .panel-scroll-body,
-  #markupsPanel .panel-scroll-body{max-height:230px;}
+  #markupsPanel .panel-scroll-body {
+    height: 235px;
+  }
 }
