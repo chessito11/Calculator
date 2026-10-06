@@ -39,6 +39,7 @@
     toolMode: "wall",
     wallTypes: loadWallTypes(),
     activeWallType: "",
+    editingWallTypeOriginalName: "",
     trace: { lastPoint: null, locked: false },
     history: [],
     view: { scale: 1, offsetX: 0, offsetY: 0 },
@@ -464,6 +465,142 @@
     }
   }
 
+  function calculateWallFromTemplate(segment, template) {
+    const lengthFt = segmentLengthFeet(segment);
+    const spacing = Math.max(1, Number(template.spacing) || 16);
+    const lengthIn = lengthFt * 12;
+    const base = Math.ceil(lengthIn / spacing) + 1;
+    const extraEnds = template.doubleEnds ? 2 : 0;
+    const waste = Math.max(0, Number(template.wastePercent) || 0) / 100;
+    return {
+      lengthFt,
+      studQty: Math.ceil((base + extraEnds) * (1 + waste)),
+      trackFt: lengthFt * (1 + waste)
+    };
+  }
+
+  function updateWallsUsingType(oldName, newName, template) {
+    pushTakeoffHistory();
+    for (const [id, wall] of state.walls.entries()) {
+      if ((wall.wallType || "") !== oldName) continue;
+      const seg = state.segments.find(s => s.id === id);
+      if (!seg) continue;
+      const c = calculateWallFromTemplate(seg, template);
+      wall.wallType = newName;
+      wall.height = Number(template.height);
+      wall.studSize = template.studSize;
+      wall.gauge = template.gauge;
+      wall.spacing = Number(template.spacing);
+      wall.topTrack = template.topTrack;
+      wall.bottomTrack = template.bottomTrack;
+      wall.doubleEnds = !!template.doubleEnds;
+      wall.wastePercent = Number(template.wastePercent) || 0;
+      wall.lengthFt = c.lengthFt;
+      wall.studQty = c.studQty;
+      wall.trackFt = c.trackFt;
+    }
+  }
+
+  function openWallTypeEditor(name) {
+    if ($("wallTypePanel") && "open" in $("wallTypePanel")) $("wallTypePanel").open = true;
+    const t = state.wallTypes[name];
+    if (!t) return;
+    state.editingWallTypeOriginalName = name;
+    $("editTypeName").value = name;
+    $("editTypeHeight").value = String(t.height ?? 10);
+    $("editTypeStudSize").value = t.studSize || '3-5/8"';
+    $("editTypeGauge").value = t.gauge || "20ga";
+    $("editTypeSpacing").value = String(t.spacing ?? 16);
+    $("editTypeTopTrack").value = t.topTrack || "Standard";
+    $("editTypeBottomTrack").value = t.bottomTrack || "Standard";
+    $("editTypeDoubleEnds").checked = !!t.doubleEnds;
+    $("editTypeWaste").value = Number(t.wastePercent ?? 0);
+    $("editTypeUpdateExisting").checked = true;
+    $("wallTypeEditorStatus").textContent = `${name} is ready to edit.`;
+    $("wallTypeEditorDialog").classList.remove("hidden");
+  }
+
+  function closeWallTypeEditor() {
+    $("wallTypeEditorDialog").classList.add("hidden");
+    $("wallTypeEditorStatus").textContent = "";
+  }
+
+  function editorTemplateFromFields() {
+    return {
+      height: Number($("editTypeHeight").value),
+      studSize: $("editTypeStudSize").value,
+      gauge: $("editTypeGauge").value,
+      spacing: Number($("editTypeSpacing").value),
+      topTrack: $("editTypeTopTrack").value,
+      bottomTrack: $("editTypeBottomTrack").value,
+      doubleEnds: $("editTypeDoubleEnds").checked,
+      wastePercent: Number($("editTypeWaste").value) || 0
+    };
+  }
+
+  function saveWallTypeEditor() {
+    const oldName = state.editingWallTypeOriginalName;
+    if (!oldName || !state.wallTypes[oldName]) {
+      $("wallTypeEditorStatus").textContent = "That wall type is no longer available.";
+      return;
+    }
+    const newName = $("editTypeName").value.trim();
+    if (!newName) {
+      $("wallTypeEditorStatus").textContent = "Enter a wall type name.";
+      return;
+    }
+    if (newName !== oldName && state.wallTypes[newName]) {
+      $("wallTypeEditorStatus").textContent = `A wall type named ${newName} already exists.`;
+      return;
+    }
+
+    const template = editorTemplateFromFields();
+    const updateExisting = $("editTypeUpdateExisting").checked;
+
+    if (newName !== oldName) delete state.wallTypes[oldName];
+    state.wallTypes[newName] = template;
+
+    if (updateExisting) {
+      updateWallsUsingType(oldName, newName, template);
+    } else if (newName !== oldName) {
+      // A rename should still keep existing wall assignments meaningful even if
+      // assembly values are not being pushed to them.
+      for (const wall of state.walls.values()) {
+        if ((wall.wallType || "") === oldName) wall.wallType = newName;
+      }
+    }
+
+    if (state.activeWallType === oldName) state.activeWallType = newName;
+    persistWallTypes();
+    markProjectDirty();
+    refreshWallTypeUI();
+    refreshTables();
+    setActiveWallType(state.activeWallType, !!state.selectedId);
+    if (state.selectedId && state.walls.has(state.selectedId)) selectSegment(state.selectedId);
+    closeWallTypeEditor();
+  }
+
+  function deleteWallTypeFromEditor() {
+    const name = state.editingWallTypeOriginalName;
+    if (!name || !state.wallTypes[name]) return;
+    const usedCount = [...state.walls.values()].filter(w => (w.wallType || "") === name).length;
+    const note = usedCount
+      ? ` ${usedCount} existing wall${usedCount === 1 ? " is" : "s are"} assigned to it; those walls will keep their current saved framing values but become Unassigned.`
+      : "";
+    if (!confirm(`Delete wall type ${name}?${note}`)) return;
+
+    delete state.wallTypes[name];
+    for (const wall of state.walls.values()) {
+      if ((wall.wallType || "") === name) wall.wallType = "";
+    }
+    if (state.activeWallType === name) state.activeWallType = "";
+    persistWallTypes();
+    markProjectDirty();
+    refreshWallTypeUI();
+    refreshTables();
+    closeWallTypeEditor();
+  }
+
   function refreshWallTypeUI() {
     const names = Object.keys(state.wallTypes).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
     const selects = [$("activeWallTypeSelect"), $("wallTypeSelect")];
@@ -485,6 +622,7 @@
 
     updateCurrentTypeBadge();
     $("wallTypeCountBadge").textContent = `${names.length} type${names.length === 1 ? "" : "s"}`;
+    $("editActiveWallTypeBtn").disabled = !state.activeWallType || !state.wallTypes[state.activeWallType];
 
     const list = $("wallTypeLibraryList");
     if (!names.length) {
@@ -500,17 +638,22 @@
       const group = document.createElement("div");
       group.className = "summary-group type-card";
       group.innerHTML = `
-        <div class="summary-title">${escapeHtml(name)}</div>
+        <div class="summary-title type-card-title"><span>${escapeHtml(name)}</span><button class="type-edit-btn" type="button">Edit</button></div>
         <div class="summary-item"><span>Stud</span><span>${escapeHtml(t.studSize)} ${escapeHtml(t.gauge)} @ ${t.spacing}" O.C.</span></div>
         <div class="summary-item"><span>Height</span><span>${escapeHtml(String(t.height))}'</span></div>
         <div class="summary-item"><span>Track</span><span>${escapeHtml(t.bottomTrack)} / ${escapeHtml(t.topTrack)}</span></div>`;
-      group.addEventListener("click", () => {
+      group.addEventListener("click", (e) => {
+        if (e.target.closest(".type-edit-btn")) return;
         $("wallTypeName").value = name;
         setActiveWallType(name, !!state.selectedId);
         if (state.selectedId) {
           $("wallTypeSelect").value = name;
           applyWallTemplate(t);
         }
+      });
+      group.querySelector(".type-edit-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openWallTypeEditor(name);
       });
       list.appendChild(group);
     }
@@ -921,6 +1064,9 @@
     }
     $("wallForm").classList.remove("hidden");
     $("selectionEmpty").classList.add("hidden");
+    if ($("selectedWallPanel") && "open" in $("selectedWallPanel")) {
+      $("selectedWallPanel").open = true;
+    }
     updateToolUI();
 
     const wall = state.walls.get(id);
@@ -1725,7 +1871,10 @@
   $("fsLockBtn").addEventListener("click", toggleTraceLock);
   $("fsFitBtn").addEventListener("click", fitDrawing);
   $("saveProjectBtn").addEventListener("click", () => showProjectDialog(true));
-  $("openProjectBtn").addEventListener("click", () => showProjectDialog(false));
+  $("openProjectBtn").addEventListener("click", () => {
+    closeMoreMenu();
+    showProjectDialog(false);
+  });
   $("closeProjectDialogBtn").addEventListener("click", closeProjectDialog);
   $("projectDialog").addEventListener("click", e => {
     if (e.target === $("projectDialog")) closeProjectDialog();
@@ -1827,6 +1976,15 @@
     updateCalibrationUI();
   });
 
+  function setAllSidePanels(open) {
+    document.querySelectorAll(".side-panel details.collapsible-panel").forEach(panel => {
+      panel.open = open;
+    });
+  }
+
+  $("collapsePanelsBtn")?.addEventListener("click", () => setAllSidePanels(false));
+  $("expandPanelsBtn")?.addEventListener("click", () => setAllSidePanels(true));
+
   $("findSelectedBtn").addEventListener("click", () => {
     if (state.selectedId && state.walls.has(state.selectedId)) {
       focusWallSegment(state.selectedId);
@@ -1867,6 +2025,16 @@
 
   $("saveWallTypeBtn").addEventListener("click", saveWallTypeFromForm);
   $("deleteWallTypeBtn").addEventListener("click", deleteWallType);
+  $("editActiveWallTypeBtn").addEventListener("click", () => {
+    if (state.activeWallType) openWallTypeEditor(state.activeWallType);
+  });
+  $("saveWallTypeEditorBtn").addEventListener("click", saveWallTypeEditor);
+  $("deleteWallTypeEditorBtn").addEventListener("click", deleteWallTypeFromEditor);
+  $("closeWallTypeEditorBtn").addEventListener("click", closeWallTypeEditor);
+  $("cancelWallTypeEditorBtn").addEventListener("click", closeWallTypeEditor);
+  $("wallTypeEditorDialog").addEventListener("pointerdown", (e) => {
+    if (e.target === $("wallTypeEditorDialog")) closeWallTypeEditor();
+  });
 
   $("undoLastBtn").addEventListener("click", undoLastTakeoff);
   $("markupsTypeFilter").addEventListener("change", refreshTables);

@@ -16,6 +16,7 @@
     <div class="top-actions">
       <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
       <button id="saveProjectBtn" class="button" type="button">Save Project</button>
+      <button id="openProjectBtn" class="button" type="button">Open Saved</button>
       <input id="dxfFile" type="file" hidden>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
@@ -25,7 +26,6 @@
       <details id="moreMenu" class="more-menu">
         <summary class="button more-summary">More ▾</summary>
         <div class="more-menu-panel">
-          <button id="openProjectBtn" class="button" type="button">Open Saved Project</button>
           <button id="fitBtn" class="button" type="button">Fit Drawing</button>
           <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
           <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
@@ -89,6 +89,10 @@
     </section>
 
     <aside class="side-panel">
+      <div class="panel-collapse-toolbar">
+        <button id="collapsePanelsBtn" class="mini-tool-button" type="button">Collapse</button>
+        <button id="expandPanelsBtn" class="mini-tool-button" type="button">Expand</button>
+      </div>
       <section id="calibrationPanel" class="panel calibration-panel setup-panel-hidden">
         <div class="panel-heading">
           <h2>Scale Calibration</h2>
@@ -121,8 +125,12 @@
         </div>
       </section>
 
-      <section id="selectedWallPanel" class="panel tool-priority">
-        <h2>Selected Wall</h2>
+      <details id="selectedWallPanel" class="panel collapsible-panel tool-priority" open>
+  <summary class="collapsible-summary">
+    <span>Selected Wall</span>
+    <span class="collapse-chevron">▾</span>
+  </summary>
+  <div class="collapsible-body">
         <div id="selectionEmpty" class="muted">Select a line in the drawing.</div>
 
         <form id="wallForm" class="wall-form hidden">
@@ -223,13 +231,21 @@
             <button id="deleteWallBtn" type="button" class="button danger">Delete</button>
           </div>
         </form>
-      </section>
+  </div>
+</details>
 
 
-      <section id="wallTypePanel" class="panel">
-        <div class="panel-heading">
-          <h2>Wall Type Library</h2>
-          <span id="wallTypeCountBadge" class="badge">0 types</span>
+      <details id="wallTypePanel" class="panel collapsible-panel" open>
+  <summary class="collapsible-summary">
+    <span>Wall Type Library</span>
+    <span class="collapse-chevron">▾</span>
+  </summary>
+  <div class="collapsible-body">
+<div class="panel-heading panel-heading-no-title">
+          <div class="panel-heading-actions">
+            <button id="editActiveWallTypeBtn" class="button compact-button" type="button" disabled>Edit Active</button>
+            <span id="wallTypeCountBadge" class="badge">0 types</span>
+          </div>
         </div>
         <div class="muted type-help">
           Save a framing assembly once, then reuse it while selecting or tracing walls.
@@ -242,10 +258,13 @@
           <button id="deleteWallTypeBtn" class="button danger" type="button">Delete Type</button>
         </div>
         <div id="wallTypeLibraryList" class="summary-list muted">No wall types saved yet.</div>
-      </section>
+  </div>
+</details>
 
-      <section id="markupsPanel" class="panel">
-        <div class="panel-heading">
+      <details id="markupsPanel" class="panel collapsible-panel" open>
+  <summary class="collapsible-summary"><span>Takeoff Markups</span><span class="collapse-chevron">▾</span></summary>
+  <div class="collapsible-body">
+<div class="panel-heading">
           <div>
             <h2>Takeoff Markups</h2>
             <div class="muted markups-subtitle">Select, edit, find, or delete individual walls.</div>
@@ -279,20 +298,104 @@
             <tbody></tbody>
           </table>
         </div>
-      </section>
+  </div>
+</details>
 
 
-      <section class="panel">
-        <h2>Wall Type Totals</h2>
-        <div id="wallTypeTotals" class="summary-list muted">No walls saved yet.</div>
-      </section>
+      <details class="panel collapsible-panel">
+  <summary class="collapsible-summary"><span>Wall Type Totals</span><span class="collapse-chevron">▾</span></summary>
+  <div class="collapsible-body">
+<div id="wallTypeTotals" class="summary-list muted">No walls saved yet.</div>
+  </div>
+</details>
 
-      <section class="panel">
-        <h2>Material Summary</h2>
-        <div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
-      </section>
+      <details class="panel collapsible-panel">
+  <summary class="collapsible-summary"><span>Material Summary</span><span class="collapse-chevron">▾</span></summary>
+  <div class="collapsible-body">
+<div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
+  </div>
+</details>
     </aside>
   </main>
+
+
+  <div id="wallTypeEditorDialog" class="project-modal hidden" role="dialog" aria-modal="true" aria-labelledby="wallTypeEditorTitle">
+    <div class="project-dialog-card wall-type-editor-card">
+      <div class="panel-heading">
+        <h2 id="wallTypeEditorTitle">Edit Wall Type</h2>
+        <button id="closeWallTypeEditorBtn" class="button" type="button">✕</button>
+      </div>
+
+      <div class="muted project-note">Edit the framing assembly here. You do not need to select a wall first.</div>
+
+      <label>Type name
+        <input id="editTypeName" type="text" maxlength="80" autocomplete="off">
+      </label>
+
+      <div class="field-row">
+        <label>Height
+          <select id="editTypeHeight">
+            <option value="8">8'-0"</option><option value="9">9'-0"</option><option value="10">10'-0"</option>
+            <option value="12">12'-0"</option><option value="14">14'-0"</option><option value="16">16'-0"</option>
+            <option value="18">18'-0"</option><option value="20">20'-0"</option>
+          </select>
+        </label>
+        <label>Stud size
+          <select id="editTypeStudSize">
+            <option>1-5/8"</option><option>2-1/2"</option><option>3-5/8"</option><option>4"</option>
+            <option>6"</option><option>8"</option><option>10"</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>Gauge
+          <select id="editTypeGauge">
+            <option>25ga</option><option>20ga</option><option>18ga</option><option>16ga</option><option>14ga</option>
+          </select>
+        </label>
+        <label>Spacing
+          <select id="editTypeSpacing">
+            <option value="12">12" O.C.</option><option value="16">16" O.C.</option><option value="24">24" O.C.</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Top track
+        <select id="editTypeTopTrack">
+          <option>Standard</option><option>Slip / Deep Leg</option><option>Deflection</option><option>None</option>
+        </select>
+      </label>
+
+      <label>Bottom track
+        <select id="editTypeBottomTrack">
+          <option>Standard</option><option>None</option>
+        </select>
+      </label>
+
+      <div class="field-row">
+        <label class="checkline editor-checkline">
+          <input id="editTypeDoubleEnds" type="checkbox"> Double end studs
+        </label>
+        <label>Waste %
+          <input id="editTypeWaste" type="number" min="0" max="30" step="1" value="0">
+        </label>
+      </div>
+
+      <label class="editor-update-existing">
+        <input id="editTypeUpdateExisting" type="checkbox" checked>
+        Update all existing walls assigned to this wall type
+      </label>
+
+      <div id="wallTypeEditorStatus" class="project-storage-status muted" role="status" aria-live="polite"></div>
+
+      <div class="project-dialog-actions">
+        <button id="saveWallTypeEditorBtn" class="button primary grow" type="button">Save Changes</button>
+        <button id="deleteWallTypeEditorBtn" class="button danger" type="button">Delete Type</button>
+        <button id="cancelWallTypeEditorBtn" class="button" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <div id="projectDialog" class="project-modal hidden" role="dialog" aria-modal="true" aria-labelledby="projectDialogTitle">
     <div class="project-dialog-card">
