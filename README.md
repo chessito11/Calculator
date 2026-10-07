@@ -215,3 +215,180 @@ Takeoff changes now keep an undo history (up to 50 takeoff states).
 The Markups List can show all wall types or only one selected wall type. Wall Type Totals and Material Summary still calculate from the complete takeoff, not only the filtered rows.
 
 No existing scale, wall type, trace, takeoff, totals, material summary, or CSV functionality was removed.
+\n\n## Version 1.8 — Larger viewer, independent scrolling, Trace Lock\n\n- The message strip below the plan is reduced to a thin one-line status bar.\n- The plan viewer stays in place; the takeoff/control column scrolls independently instead of moving the whole page.\n- On iPad/phone layouts the screen is split so the plan keeps most of the height and the controls below have their own scroll area.\n- **TRACE LOCK** works like a reuse/continuous takeoff tool. Turn it on once and TRACE WALLS stays active as you keep choosing corner after corner.\n- With Trace Lock off, TRACE WALLS creates one wall and returns to normal WALL mode.\n- Pressing WALL or entering Scale mode turns Trace Lock off intentionally.\n\nAll previous takeoff, wall type, Markups List, delete, Undo, totals, scale, and CSV functionality remains.\n
+
+## Version 1.9 — Selected DELETE, visible Trace Lock, Bluebeam-style FIND
+
+### DELETE selected wall
+
+A compact **DELETE** button is now available beside the viewer controls.
+
+1. Select any saved takeoff wall.
+2. DELETE becomes active.
+3. Press DELETE to remove that one takeoff markup.
+
+The existing confirmation and **Undo Last** history remain. If the wall came from TRACE WALLS, its generated trace segment is removed. If it came from the original DXF, the source DXF geometry is left untouched.
+
+On desktop, the keyboard Delete/Backspace key can also delete the selected saved markup when you are not typing in a form field.
+
+### TRACE LOCK selected state
+
+When Trace Lock is ON:
+
+- The button changes to a bright green.
+- Its text changes to `TRACE LOCK ✓`.
+- The state remains visible until the lock is turned off.
+
+### FIND selected wall
+
+A compact **FIND** button is now available beside DELETE.
+
+Select a saved wall and press FIND. The viewer:
+
+- centers that wall in the plan window,
+- zooms it to a useful viewing size,
+- highlights/selects the wall,
+- shows the found wall number in the status strip.
+
+The Markups List `Locate` action is now labeled **Find** and uses the same centering/zoom behavior.
+
+
+## Version 2.0 — Current Type, Saved Projects and Full-Screen Plan
+
+### Active wall type displayed beside TRACE LOCK
+
+`TYPE: W1` is always visible beside TRACE LOCK and updates as you choose another type in the viewer selector or Wall Type Library. The unassigned state is amber; a selected type is green.
+
+### Save a whole project (not just a CSV)
+
+- Press **Save Project**, give a name, and save it to browser IndexedDB.
+- Press **Projects ▾** to see named saved jobs, open them without importing the DXF again, or delete an old saved job.
+- All selectable DXF segments, manually traced walls, markup list and quantities, scale calibration, wall type definitions, and active type are included.
+- **Download Backup (.json)** creates a portable file you can store in Files/Dropbox/Drive.
+- **Import Backup** restores a portable file to this browser's saved project list.
+- Saved project names can be reused to update the same job. A button at the top saves changes to the currently named job.
+
+**Important:** Saved jobs stay on the device and browser where you save them. Private browsing or clearing site data may remove them. Download a backup to move jobs to another device or to protect important work. Save is manual; there is no background autosave in this release. Use Save Project after significant changes.
+
+### Full Screen
+
+Press **Full Screen** on the plan viewer toolbar. The viewer expands to cover the device window, including on iPad Safari where browser-native fullscreen support varies. Press **Exit Full Screen** or Escape to return. Existing zoom/pan and wall selection stay intact.
+
+
+## Version 2.1 — Dedicated Wall Type Editor
+
+Wall types can now be edited directly without selecting a wall first.
+
+- Each Wall Type Library card has an **Edit** button.
+- The current active type also has an **Edit Active** button.
+- The editor changes type name, height, stud size, gauge, spacing, top track, bottom track, double-end setting, and waste percentage.
+- **Update all existing walls assigned to this wall type** is checked by default. When saved, those walls are recalculated and the Wall Type Totals / Material Summary refresh immediately.
+- Renaming a wall type updates existing wall assignments to the new name.
+- Deleting a wall type from the editor leaves existing wall geometry/takeoff records in place but marks those walls Unassigned.
+
+
+## Version 2.2 — Collapsible option panels
+
+The takeoff option panels can now be collapsed independently to free up more screen space.
+
+Collapsible sections include:
+
+- Selected Wall
+- Wall Type Library
+- Takeoff Markups
+- Wall Type Totals
+- Material Summary
+
+The Selected Wall and Wall Type Library panels start open. Totals and Material Summary start collapsed.
+
+Two compact controls are added above the options column:
+
+- **Collapse** — closes all option panels.
+- **Expand** — opens all option panels.
+
+Selecting a wall automatically reopens the Selected Wall panel, so the wall-editing controls are still immediately available when needed.
+
+No takeoff, trace, scale, delete, find, wall-type, project-save, full-screen, summary, or export functionality was removed.
+
+
+## Version 2.3 — Wall Type Library scroll fix
+
+The Wall Type Library now has its own vertical scroll area.
+
+This fixes the issue where only the first few saved wall types were visible after the option panels became collapsible.
+
+The plan viewer and the rest of the options area stay in place while the wall-type list itself scrolls independently.
+
+
+## Version 2.6 — guaranteed scrolling in every collapsible tab
+
+This version is built from the stable Version 2.3 panel/Markups structure.
+
+All open collapsible tabs now use one explicit internal scroll container:
+
+- Selected Wall
+- Wall Type Library
+- Takeoff Markups
+- Wall Type Totals
+- Material Summary
+
+Scrolling works through:
+
+- Mouse wheel
+- Finger swipe on iPad / touch devices
+- Small ▲ / ▼ fallback buttons inside every open panel
+
+The Takeoff Markups logic, table, Find, Delete, Undo, filters, collapse/open behavior, and wall-type logic were not restructured.
+
+
+## Version 2.7 — compact controls + persistent full-screen viewer
+
+### Maximum plan area
+
+The main toolbar is now roughly half its previous height.
+
+Always-visible controls are reduced to:
+
+- OPEN
+- WALL
+- TRACE
+- LOCK
+- Current wall type
+- OPTIONS
+
+Save/Open Project, Fit, Scale, units, CSV and project backup tools remain available under OPTIONS.
+
+The controls beside the plan viewer are now hidden inside a compact **VIEW** menu:
+
+- Active wall type
+- Find
+- Delete
+- Full Screen
+- Scale status
+- Wall count
+
+No function was removed.
+
+### Persistent full-screen viewer
+
+ATLAS now uses its own fixed-position full-screen/focus mode on every device instead of relying on the browser's native Fullscreen API.
+
+This is intentional because Safari/iPad can dismiss native fullscreen after touch gestures, browser UI changes, rotation, or returning from another app.
+
+Once Full Screen is activated, ATLAS reasserts the viewer after resize/orientation/visibility changes and stays full-screen until:
+
+- **Exit Full Screen** is pressed, or
+- Escape is pressed on a keyboard.
+
+Tracing, selecting walls, Find, Delete, pan, zoom, and other plan interactions no longer exit full screen.
+
+
+## Version 2.8 — Quick Area temporary takeoff
+
+Press AREA, tap a temporary polygon around part of the plan, then CLOSE AREA.
+
+ATLAS calculates only the portions of saved wall markups that fall inside the polygon. A 40-foot wall with only 15 feet inside contributes 15 feet to the Quick Area totals.
+
+Results show selected polygon SF, intersected wall count, clipped wall LF, studs, top/bottom track, totals grouped by Wall Type, and individual intersected walls.
+
+Quick Area is temporary and is not saved with the project. REDRAW or CLEAR removes the temporary selection without changing any wall markup or project total.

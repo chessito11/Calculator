@@ -13,19 +13,20 @@
       <div class="eyebrow">Standalone DXF framing takeoff</div>
       <h1>ATLAS Takeoff</h1>
     </div>
-    <div class="top-actions">
-      <button id="openDxfBtn" class="button primary" type="button">Open DXF</button>
-      <button id="saveProjectBtn" class="button" type="button">Save Project</button>
-      <button id="openProjectBtn" class="button" type="button">Open Saved</button>
+    <div class="top-actions compact-top-actions">
+      <button id="openDxfBtn" class="button primary" type="button">OPEN</button>
       <input id="dxfFile" type="file" hidden>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
-      <button id="traceWallsBtn" class="button" type="button">TRACE WALLS</button>
-      <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">TRACE LOCK</button>
-      <span id="currentTypeBadge" class="current-type-badge" role="status" aria-live="polite" title="Current wall type for new traced walls">TYPE: Unassigned</span>
+      <button id="traceWallsBtn" class="button" type="button">TRACE</button>
+      <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">LOCK</button>
+      <button id="quickAreaBtn" class="button quick-area-button" type="button" aria-pressed="false">AREA</button>
+      <span id="currentTypeBadge" class="current-type-badge compact-type-badge" role="status" aria-live="polite" title="Current wall type for new traced walls">TYPE: Unassigned</span>
 
       <details id="moreMenu" class="more-menu">
-        <summary class="button more-summary">More ▾</summary>
+        <summary class="button more-summary">OPTIONS ▾</summary>
         <div class="more-menu-panel">
+          <button id="saveProjectBtn" class="button" type="button">Save Project</button>
+          <button id="openProjectBtn" class="button" type="button">Open Saved</button>
           <button id="fitBtn" class="button" type="button">Fit Drawing</button>
           <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
           <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
@@ -52,32 +53,71 @@
 
   <main class="app-grid">
     <section class="viewer-card">
-      <div class="viewer-toolbar">
+      <div class="viewer-toolbar compact-viewer-toolbar">
         <div id="fileStatus">No DXF loaded</div>
-        <div class="toolbar-right">
-          <label>Active type
-            <select id="activeWallTypeSelect">
-              <option value="">Unassigned</option>
-            </select>
-          </label>
-          <button id="findSelectedBtn" class="mini-tool-button" type="button" disabled>FIND</button>
-          <button id="deleteSelectedBtn" class="mini-tool-button delete-mini" type="button" disabled>DELETE</button>
-          <button id="fullscreenBtn" class="mini-tool-button fullscreen-main" type="button" aria-pressed="false">⛶ FULL SCREEN</button>
-          <span id="scaleBadge" class="badge">Scale: DXF units</span>
-          <span id="wallCountBadge" class="badge">0 walls</span>
-        </div>
+        <details id="viewerOptionsMenu" class="viewer-options-menu">
+          <summary class="mini-tool-button viewer-options-summary">VIEW ▾</summary>
+          <div class="viewer-options-panel">
+            <label>Active type
+              <select id="activeWallTypeSelect">
+                <option value="">Unassigned</option>
+              </select>
+            </label>
+            <button id="findSelectedBtn" class="mini-tool-button" type="button" disabled>FIND</button>
+            <button id="deleteSelectedBtn" class="mini-tool-button delete-mini" type="button" disabled>DELETE</button>
+            <button id="fullscreenBtn" class="mini-tool-button fullscreen-main" type="button" aria-pressed="false">⛶ FULL SCREEN</button>
+            <div class="viewer-option-status">
+              <span id="scaleBadge" class="badge">Scale: DXF units</span>
+              <span id="wallCountBadge" class="badge">0 walls</span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div id="fullScreenTools" class="fullscreen-tools" aria-label="Full-screen wall tools">
         <button id="fsWallBtn" class="button" type="button">WALL</button>
         <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
         <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
+        <button id="fsAreaBtn" class="button" type="button">AREA</button>
         <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <button id="fsFitBtn" class="button" type="button">Fit</button>
         <button id="fsExitBtn" class="button" type="button">Exit Full Screen</button>
       </div>
       <div id="canvasWrap">
+        <div id="quickAreaToolbar" class="quick-area-toolbar hidden">
+          <span id="quickAreaInstruction">AREA: Tap boundary points</span>
+          <button id="quickAreaUndoBtn" class="mini-tool-button" type="button" disabled>UNDO POINT</button>
+          <button id="quickAreaCloseBtn" class="mini-tool-button quick-area-close" type="button" disabled>CLOSE AREA</button>
+          <button id="quickAreaClearBtn" class="mini-tool-button delete-mini" type="button">CLEAR</button>
+        </div>
+
+        <div id="quickAreaResults" class="quick-area-results hidden">
+          <div class="quick-area-results-head">
+            <strong>QUICK AREA TAKEOFF</strong>
+            <button id="quickAreaResultsCloseBtn" class="quick-area-x" type="button">✕</button>
+          </div>
+
+          <div class="quick-area-stat-grid">
+            <div><span>Selected area</span><strong id="quickAreaSquareFeet">—</strong></div>
+            <div><span>Wall length</span><strong id="quickAreaTotalLength">—</strong></div>
+            <div><span>Walls intersected</span><strong id="quickAreaWallCount">—</strong></div>
+            <div><span>Studs</span><strong id="quickAreaStudCount">—</strong></div>
+          </div>
+
+          <div id="quickAreaGroups" class="quick-area-groups"></div>
+
+          <details class="quick-area-details">
+            <summary>Individual intersected walls</summary>
+            <div id="quickAreaWallList" class="quick-area-wall-list"></div>
+          </details>
+
+          <div class="quick-area-result-actions">
+            <button id="quickAreaRedrawBtn" class="button primary" type="button">REDRAW</button>
+            <button id="quickAreaResultClearBtn" class="button" type="button">CLEAR</button>
+          </div>
+        </div>
+
         <canvas id="dxfCanvas"></canvas>
         <div id="emptyState" class="empty-state">
           <strong>Open a DXF drawing</strong>

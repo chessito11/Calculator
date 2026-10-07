@@ -31,6 +31,7 @@
     savedProjectId: null,
     projectDirty: false,
     fullscreenFallback: false,
+    fullscreenPersistent: false,
     segments: [],
     selectedId: null,
     walls: new Map(),
@@ -41,6 +42,13 @@
     activeWallType: "",
     editingWallTypeOriginalName: "",
     trace: { lastPoint: null, locked: false },
+    quickArea: {
+      active: false,
+      closed: false,
+      points: [],
+      results: null,
+      previousTool: "wall"
+    },
     history: [],
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
@@ -280,6 +288,50 @@
 
     drawCalibrationOverlay();
     drawTraceOverlay();
+    drawQuickAreaOverlay();
+  }
+
+  function drawQuickAreaOverlay() {
+    const qa = state.quickArea;
+    if (!qa.points.length) return;
+
+    ctx.save();
+    const pts = qa.points.map(p => worldToScreen(p.x, p.y));
+
+    if (qa.closed && pts.length >= 3) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(80,227,194,.14)";
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    if (qa.closed && pts.length >= 3) ctx.closePath();
+    ctx.strokeStyle = "#50e3c2";
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash(qa.closed ? [] : [7,5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    pts.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, i === 0 ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? "#ffd166" : "#50e3c2";
+      ctx.fill();
+      ctx.strokeStyle = "#07120f";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = "#07120f";
+      ctx.font = "bold 9px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(i + 1), p.x, p.y);
+    });
+    ctx.restore();
   }
 
   function drawTraceOverlay() {
@@ -412,6 +464,349 @@
       }
     }
     return best;
+  }
+
+
+  function quickAreaSnapPoint(screenX, screenY) {
+    let best = null;
+    let bestDistance = 18;
+    for (const s of state.segments) {
+      for (const p of [{x:s.x1,y:s.y1},{x:s.x2,y:s.y2}]) {
+        const sp = worldToScreen(p.x, p.y);
+        const d = Math.hypot(screenX-sp.x, screenY-sp.y);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = {x:p.x,y:p.y};
+        }
+      }
+    }
+    return best || screenToWorld(screenX, screenY);
+  }
+
+  function cross2(ax, ay, bx, by) {
+    return ax*by - ay*bx;
+  }
+
+  function pointOnSegment(point, a, b, eps=1e-8) {
+    const abx=b.x-a.x, aby=b.y-a.y;
+    const apx=point.x-a.x, apy=point.y-a.y;
+    const c=Math.abs(cross2(abx,aby,apx,apy));
+    if (c > eps*Math.max(1,Math.hypot(abx,aby))) return false;
+    const dot=apx*abx+apy*aby;
+    if (dot < -eps) return false;
+    const len2=abx*abx+aby*aby;
+    return dot <= len2+eps;
+  }
+
+  function pointInPolygon(point, polygon) {
+    if (!polygon || polygon.length < 3) return false;
+    for (let i=0,j=polygon.length-1;i<polygon.length;j=i++) {
+      if (pointOnSegment(point, polygon[j], polygon[i])) return true;
+    }
+    let inside=false;
+    for (let i=0,j=polygon.length-1;i<polygon.length;j=i++) {
+      const a=polygon[i], b=polygon[j];
+      const hit=((a.y>point.y)!==(b.y>point.y)) &&
+        (point.x < (b.x-a.x)*(point.y-a.y)/((b.y-a.y)||1e-30)+a.x);
+      if (hit) inside=!inside;
+    }
+    return inside;
+  }
+
+  function pushUniqueT(list, value, eps=1e-8) {
+    const t=Math.max(0,Math.min(1,value));
+    if (!list.some(v=>Math.abs(v-t)<=eps)) list.push(t);
+  }
+
+  function addEdgeIntersections(p0,p1,q0,q1,ts) {
+    const rx=p1.x-p0.x, ry=p1.y-p0.y;
+    const sx=q1.x-q0.x, sy=q1.y-q0.y;
+    const qpx=q0.x-p0.x, qpy=q0.y-p0.y;
+    const denom=cross2(rx,ry,sx,sy);
+    const qpr=cross2(qpx,qpy,rx,ry);
+    const eps=1e-10;
+
+    if (Math.abs(denom)>eps) {
+      const t=cross2(qpx,qpy,sx,sy)/denom;
+      const u=cross2(qpx,qpy,rx,ry)/denom;
+      if (t>=-eps && t<=1+eps && u>=-eps && u<=1+eps) pushUniqueT(ts,t);
+      return;
+    }
+
+    if (Math.abs(qpr)<=eps) {
+      const rr=rx*rx+ry*ry;
+      if (rr<=eps) return;
+      const t0=((q0.x-p0.x)*rx+(q0.y-p0.y)*ry)/rr;
+      const t1=((q1.x-p0.x)*rx+(q1.y-p0.y)*ry)/rr;
+      if (t0>=-eps && t0<=1+eps) pushUniqueT(ts,t0);
+      if (t1>=-eps && t1<=1+eps) pushUniqueT(ts,t1);
+    }
+  }
+
+  function segmentIntervalsInsidePolygon(segment, polygon) {
+    const p0={x:segment.x1,y:segment.y1};
+    const p1={x:segment.x2,y:segment.y2};
+    const ts=[0,1];
+
+    for (let i=0;i<polygon.length;i++) {
+      addEdgeIntersections(p0,p1,polygon[i],polygon[(i+1)%polygon.length],ts);
+    }
+    ts.sort((a,b)=>a-b);
+    const unique=[];
+    for (const t of ts) pushUniqueT(unique,t);
+    unique.sort((a,b)=>a-b);
+
+    const intervals=[];
+    for (let i=0;i<unique.length-1;i++) {
+      const t0=unique[i], t1=unique[i+1];
+      if (t1-t0<=1e-9) continue;
+      const tm=(t0+t1)/2;
+      const mid={x:p0.x+(p1.x-p0.x)*tm,y:p0.y+(p1.y-p0.y)*tm};
+      if (pointInPolygon(mid,polygon)) intervals.push([t0,t1]);
+    }
+    return intervals;
+  }
+
+  function quickAreaPolygonSquareFeet(points) {
+    if (points.length<3) return 0;
+    let twice=0;
+    for (let i=0;i<points.length;i++) {
+      const a=points[i], b=points[(i+1)%points.length];
+      twice += a.x*b.y-b.x*a.y;
+    }
+    const raw=Math.abs(twice)/2;
+    const f=activeFeetPerUnit();
+    return raw*f*f;
+  }
+
+  function quickAreaStudsForIntervals(wall, fullLengthFt, intervals) {
+    const spacing=Math.max(1,Number(wall.spacing)||16);
+    const waste=Math.max(0,Number(wall.wastePercent)||0)/100;
+    let rawStuds=0;
+
+    for (const [t0,t1] of intervals) {
+      const pieceFt=fullLengthFt*(t1-t0);
+      if (pieceFt<=1e-8) continue;
+      const base=Math.ceil(pieceFt*12/spacing)+1;
+      let endExtras=0;
+      if (wall.doubleEnds) {
+        if (t0<=1e-8) endExtras+=1;
+        if (t1>=1-1e-8) endExtras+=1;
+      }
+      rawStuds += base+endExtras;
+    }
+    return Math.ceil(rawStuds*(1+waste));
+  }
+
+  function calculateQuickArea() {
+    const polygon=state.quickArea.points;
+    const groups=new Map();
+    const items=[];
+    let totalLengthFt=0,totalStuds=0,totalTopFt=0,totalBottomFt=0;
+
+    for (const wall of state.walls.values()) {
+      const seg=state.segments.find(s=>s.id===wall.segmentId);
+      if (!seg) continue;
+      const intervals=segmentIntervalsInsidePolygon(seg,polygon);
+      if (!intervals.length) continue;
+
+      const fullLengthFt=segmentLengthFeet(seg);
+      const fraction=intervals.reduce((sum,[a,b])=>sum+(b-a),0);
+      const clippedLengthFt=fullLengthFt*fraction;
+      if (clippedLengthFt<=1e-7) continue;
+
+      const waste=Math.max(0,Number(wall.wastePercent)||0)/100;
+      const clippedTrackFt=clippedLengthFt*(1+waste);
+      const studs=quickAreaStudsForIntervals(wall,fullLengthFt,intervals);
+      const topFt=wall.topTrack==="None"?0:clippedTrackFt;
+      const bottomFt=wall.bottomTrack==="None"?0:clippedTrackFt;
+      const type=wall.wallType||"Unassigned";
+
+      const item={
+        wallNumber:wall.wallNumber, wallType:type,
+        lengthFt:clippedLengthFt, studs, topFt, bottomFt,
+        studSize:wall.studSize, gauge:wall.gauge, spacing:wall.spacing
+      };
+      items.push(item);
+
+      if (!groups.has(type)) groups.set(type,{wallCount:0,lengthFt:0,studs:0,topFt:0,bottomFt:0});
+      const g=groups.get(type);
+      g.wallCount++; g.lengthFt+=clippedLengthFt; g.studs+=studs; g.topFt+=topFt; g.bottomFt+=bottomFt;
+      totalLengthFt+=clippedLengthFt; totalStuds+=studs; totalTopFt+=topFt; totalBottomFt+=bottomFt;
+    }
+
+    items.sort((a,b)=>a.wallType.localeCompare(b.wallType,undefined,{numeric:true}) ||
+      a.wallNumber.localeCompare(b.wallNumber,undefined,{numeric:true}));
+
+    return {
+      squareFeet:quickAreaPolygonSquareFeet(polygon),
+      wallCount:items.length,lengthFt:totalLengthFt,studs:totalStuds,
+      topFt:totalTopFt,bottomFt:totalBottomFt,groups,items
+    };
+  }
+
+  function renderQuickAreaResults(results) {
+    state.quickArea.results=results;
+    $("quickAreaSquareFeet").textContent=`${results.squareFeet.toFixed(1)} SF`;
+    $("quickAreaTotalLength").textContent=`${formatFeetInches(results.lengthFt)} (${results.lengthFt.toFixed(2)} LF)`;
+    $("quickAreaWallCount").textContent=String(results.wallCount);
+    $("quickAreaStudCount").textContent=`${results.studs} pcs`;
+
+    const groupsEl=$("quickAreaGroups");
+    groupsEl.replaceChildren();
+    const names=[...results.groups.keys()].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+
+    if (!names.length) {
+      const empty=document.createElement("div");
+      empty.className="quick-area-empty";
+      empty.textContent="No saved wall markups intersect this area.";
+      groupsEl.appendChild(empty);
+    }
+
+    for (const name of names) {
+      const g=results.groups.get(name);
+      const card=document.createElement("div");
+      card.className="quick-area-type-card";
+      const title=document.createElement("strong");
+      title.textContent=name;
+      const stats=document.createElement("div");
+      stats.className="quick-area-type-stats";
+      const lines=[
+        ["Walls",String(g.wallCount)],
+        ["Length",`${formatFeetInches(g.lengthFt)} (${g.lengthFt.toFixed(2)} LF)`],
+        ["Studs",`${g.studs} pcs`],
+        ["Top track",`${g.topFt.toFixed(2)} LF`],
+        ["Bottom track",`${g.bottomFt.toFixed(2)} LF`]
+      ];
+      for (const [label,value] of lines) {
+        const row=document.createElement("div");
+        const a=document.createElement("span"), b=document.createElement("span");
+        a.textContent=label; b.textContent=value;
+        row.append(a,b); stats.appendChild(row);
+      }
+      card.append(title,stats); groupsEl.appendChild(card);
+    }
+
+    const wallsEl=$("quickAreaWallList");
+    wallsEl.replaceChildren();
+    for (const item of results.items) {
+      const row=document.createElement("div");
+      row.className="quick-area-wall-row";
+      const main=document.createElement("div");
+      const strong=document.createElement("strong");
+      strong.textContent=item.wallNumber;
+      const meta=document.createElement("small");
+      meta.textContent=`${item.wallType} • ${item.studSize} ${item.gauge} @ ${item.spacing}" O.C.`;
+      main.append(strong,meta);
+      const qty=document.createElement("div");
+      qty.className="quick-area-wall-qty";
+      qty.textContent=`${formatFeetInches(item.lengthFt)} • ${item.studs} studs`;
+      row.append(main,qty); wallsEl.appendChild(row);
+    }
+    $("quickAreaResults").classList.remove("hidden");
+  }
+
+  function updateQuickAreaUI() {
+    const qa=state.quickArea;
+    const drawing=qa.active;
+    $("quickAreaBtn").classList.toggle("active-tool",drawing);
+    $("quickAreaBtn").setAttribute("aria-pressed",drawing?"true":"false");
+    $("fsAreaBtn").classList.toggle("active-tool",drawing);
+    $("quickAreaToolbar").classList.toggle("hidden",!drawing);
+    $("quickAreaUndoBtn").disabled=qa.points.length===0;
+    $("quickAreaCloseBtn").disabled=qa.points.length<3;
+
+    if (drawing) {
+      $("quickAreaInstruction").textContent=qa.points.length<3
+        ? `AREA: ${qa.points.length} point${qa.points.length===1?"":"s"} • need ${3-qa.points.length} more`
+        : `AREA: ${qa.points.length} points • CLOSE when finished`;
+      $("hintbar").textContent="AREA: Tap polygon corners • CLOSE when finished";
+    }
+    if (!qa.closed) $("quickAreaResults").classList.add("hidden");
+    syncFullscreenTools();
+    draw();
+  }
+
+  function restoreToolAfterQuickArea() {
+    if (state.trace.locked || state.quickArea.previousTool==="trace") {
+      state.toolMode="trace";
+      state.trace.lastPoint=null;
+    } else {
+      state.toolMode="wall";
+    }
+    updateToolUI();
+    updateTraceUI();
+  }
+
+  function startQuickArea() {
+    if (!state.segments.length) { alert("Open a DXF drawing first."); return; }
+    if (!state.walls.size) { alert("Create some wall markups first."); return; }
+
+    state.quickArea.previousTool=state.toolMode==="trace"?"trace":"wall";
+    state.quickArea.active=true;
+    state.quickArea.closed=false;
+    state.quickArea.points=[];
+    state.quickArea.results=null;
+    state.toolMode="area";
+    state.calibration.activePoint=null;
+    state.trace.lastPoint=null;
+    hideCalibrationPanel();
+    closeMoreMenu();
+    if ($("viewerOptionsMenu")) $("viewerOptionsMenu").open=false;
+    $("quickAreaResults").classList.add("hidden");
+    updateToolUI();
+    updateQuickAreaUI();
+  }
+
+  function clearQuickArea(options={}) {
+    const restoreTool=options.restoreTool!==false;
+    const wasActive=state.quickArea.active;
+    state.quickArea.active=false;
+    state.quickArea.closed=false;
+    state.quickArea.points=[];
+    state.quickArea.results=null;
+    $("quickAreaToolbar").classList.add("hidden");
+    $("quickAreaResults").classList.add("hidden");
+    if (restoreTool && (wasActive || state.toolMode==="area")) restoreToolAfterQuickArea();
+    updateQuickAreaUI();
+  }
+
+  function undoQuickAreaPoint() {
+    if (!state.quickArea.active || !state.quickArea.points.length) return;
+    state.quickArea.points.pop();
+    updateQuickAreaUI();
+  }
+
+  function addQuickAreaPoint(screenX,screenY) {
+    if (!state.quickArea.active) return;
+    const point=quickAreaSnapPoint(screenX,screenY);
+
+    if (state.quickArea.points.length>=3) {
+      const first=worldToScreen(state.quickArea.points[0].x,state.quickArea.points[0].y);
+      if (Math.hypot(screenX-first.x,screenY-first.y)<=20) { closeQuickArea(); return; }
+    }
+
+    const last=state.quickArea.points[state.quickArea.points.length-1];
+    if (last && rawPointDistance(last,point)<=1e-9) return;
+    state.quickArea.points.push({x:point.x,y:point.y});
+    updateQuickAreaUI();
+  }
+
+  function closeQuickArea() {
+    if (state.quickArea.points.length<3) { alert("Quick Area needs at least 3 points."); return; }
+    const results=calculateQuickArea();
+    state.quickArea.active=false;
+    state.quickArea.closed=true;
+    renderQuickAreaResults(results);
+    $("quickAreaToolbar").classList.add("hidden");
+    restoreToolAfterQuickArea();
+    $("hintbar").textContent=`QUICK AREA: ${results.wallCount} walls • ${results.lengthFt.toFixed(2)} LF • ${results.studs} studs`;
+    updateQuickAreaUI();
+  }
+
+  function redrawQuickArea() {
+    clearQuickArea({restoreTool:false});
+    startQuickArea();
   }
 
   function wallTemplateFromForm() {
@@ -826,7 +1221,9 @@
   function updateToolUI() {
     const wallActive = state.toolMode === "wall";
     const traceActive = state.toolMode === "trace";
+    const areaActive = state.toolMode === "area" && state.quickArea.active;
     $("wallModeBtn").classList.toggle("active-tool", wallActive);
+    $("quickAreaBtn").classList.toggle("active-tool", areaActive);
     $("traceWallsBtn").classList.toggle("active-tool", traceActive);
     $("traceLockBtn").classList.toggle("active-tool", !!state.trace.locked);
     $("traceLockBtn").setAttribute("aria-pressed", state.trace.locked ? "true" : "false");
@@ -1701,6 +2098,7 @@
   }
 
   function restoreProject(data, id = null) {
+    clearQuickArea({restoreTool:false});
     const p = assertProject(data);
     restoringProject = true;
     try {
@@ -1799,11 +2197,15 @@
     } catch (_) { /* User can still open/import manually. */ }
   }
 
-  // Viewer fullscreen: use native Fullscreen API where supported, CSS fallback for iPad Safari.
+  // Persistent viewer focus mode.
+  // We intentionally use the CSS fixed-position fullscreen implementation on every
+  // device. Native browser fullscreen can be dismissed unexpectedly by iPad/Safari
+  // after touch gestures or UI changes.
   const viewerCard = document.querySelector(".viewer-card");
   let fullscreenCenter = null;
+
   function isViewerFullscreen() {
-    return document.fullscreenElement === viewerCard || state.fullscreenFallback;
+    return !!state.fullscreenPersistent;
   }
 
   function captureViewerCenter() {
@@ -1834,41 +2236,53 @@
     $("fsTraceBtn").classList.toggle("active-tool", state.toolMode === "trace");
     $("fsLockBtn").classList.toggle("trace-on", state.trace.locked);
     $("fsLockBtn").textContent = state.trace.locked ? "TRACE LOCK ✓" : "TRACE LOCK";
+    $("fsAreaBtn").classList.toggle("active-tool", state.toolMode === "area" && state.quickArea.active);
   }
 
-  async function toggleViewerFullscreen() {
+  function applyPersistentFullscreen(active) {
+    state.fullscreenPersistent = !!active;
+    state.fullscreenFallback = !!active; // retained for project/state compatibility
+    viewerCard.classList.toggle("fullscreen-fallback", !!active);
+    document.documentElement.classList.toggle("viewer-focus-active", !!active);
+    document.body.classList.toggle("viewer-focus-active", !!active);
+    syncFullscreenTools();
+  }
+
+  async function toggleViewerFullscreen(forceState = null) {
     fullscreenCenter = captureViewerCenter();
-    if (isViewerFullscreen()) {
-      if (document.fullscreenElement === viewerCard) {
-        try { await document.exitFullscreen(); } catch (_) { /* keep fallback below */ }
-      }
-      state.fullscreenFallback = false;
-      viewerCard.classList.remove("fullscreen-fallback");
-      reflowViewerAfterModeChange();
-      return;
-    }
-    if (viewerCard.requestFullscreen) {
-      try {
-        await viewerCard.requestFullscreen();
-        reflowViewerAfterModeChange();
-        return;
-      } catch (_) { /* iOS Safari can reject element fullscreen */ }
-    }
-    state.fullscreenFallback = true;
-    viewerCard.classList.add("fullscreen-fallback");
+    const next = forceState === null ? !isViewerFullscreen() : !!forceState;
+    applyPersistentFullscreen(next);
     reflowViewerAfterModeChange();
   }
 
-  document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement) state.fullscreenFallback = false;
-    reflowViewerAfterModeChange();
+  // If Safari resizes, rotates, hides/reveals browser chrome, or returns from another
+  // app while focus mode is active, re-assert the viewer class instead of exiting.
+  function preservePersistentFullscreen() {
+    if (!state.fullscreenPersistent) return;
+    if (!viewerCard.classList.contains("fullscreen-fallback")) {
+      viewerCard.classList.add("fullscreen-fallback");
+    }
+    document.documentElement.classList.add("viewer-focus-active");
+    document.body.classList.add("viewer-focus-active");
+    requestAnimationFrame(resizeCanvas);
+  }
+
+  window.addEventListener("resize", preservePersistentFullscreen);
+  window.addEventListener("orientationchange", preservePersistentFullscreen);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) preservePersistentFullscreen();
   });
 
-  $("fullscreenBtn").addEventListener("click", toggleViewerFullscreen);
-  $("fsExitBtn").addEventListener("click", toggleViewerFullscreen);
+  $("fullscreenBtn").addEventListener("click", () => {
+    const viewMenu = $("viewerOptionsMenu");
+    if (viewMenu) viewMenu.open = false;
+    toggleViewerFullscreen();
+  });
+  $("fsExitBtn").addEventListener("click", () => toggleViewerFullscreen(false));
   $("fsWallBtn").addEventListener("click", () => activateWallMode(false));
   $("fsTraceBtn").addEventListener("click", activateTraceMode);
   $("fsLockBtn").addEventListener("click", toggleTraceLock);
+  $("fsAreaBtn").addEventListener("click", startQuickArea);
   $("fsFitBtn").addEventListener("click", fitDrawing);
   $("saveProjectBtn").addEventListener("click", () => showProjectDialog(true));
   $("openProjectBtn").addEventListener("click", () => {
@@ -1890,7 +2304,7 @@
   $("projectImportFile").addEventListener("change", e => importProjectBackup(e.target.files?.[0]));
   window.addEventListener("keydown", e => {
     if (e.key === "Escape" && !$("projectDialog").classList.contains("hidden")) closeProjectDialog();
-    if (e.key === "Escape" && state.fullscreenFallback) toggleViewerFullscreen();
+    if (e.key === "Escape" && state.fullscreenPersistent) toggleViewerFullscreen(false);
   });
   window.addEventListener("beforeunload", e => {
     if (state.projectDirty && state.segments.length) {
@@ -1985,6 +2399,10 @@
     if (menu && menu.open && !menu.contains(e.target)) {
       menu.open = false;
     }
+    const viewMenu = $("viewerOptionsMenu");
+    if (viewMenu && viewMenu.open && !viewMenu.contains(e.target)) {
+      viewMenu.open = false;
+    }
   });
 
   $("openDxfBtn").addEventListener("click", () => {
@@ -2009,6 +2427,7 @@
     if (state.projectDirty && state.segments.length &&
         !confirm("Open a different DXF? Unsaved takeoff changes will be lost.")) return;
 
+    clearQuickArea({restoreTool:false});
     const text = await file.text();
     const parsed = parseDXF(text);
 
@@ -2070,17 +2489,26 @@
     if (state.selectedId && state.walls.has(state.selectedId)) {
       focusWallSegment(state.selectedId);
     }
+    if ($("viewerOptionsMenu")) $("viewerOptionsMenu").open = false;
   });
 
   $("deleteSelectedBtn").addEventListener("click", () => {
     if (state.selectedId && state.walls.has(state.selectedId)) {
       deleteWallById(state.selectedId, true);
     }
+    if ($("viewerOptionsMenu")) $("viewerOptionsMenu").open = false;
   });
 
   $("wallModeBtn").addEventListener("click", () => activateWallMode(true));
   $("traceWallsBtn").addEventListener("click", activateTraceMode);
   $("traceLockBtn").addEventListener("click", toggleTraceLock);
+  $("quickAreaBtn").addEventListener("click", startQuickArea);
+  $("quickAreaUndoBtn").addEventListener("click", undoQuickAreaPoint);
+  $("quickAreaCloseBtn").addEventListener("click", closeQuickArea);
+  $("quickAreaClearBtn").addEventListener("click", () => clearQuickArea());
+  $("quickAreaResultsCloseBtn").addEventListener("click", () => clearQuickArea());
+  $("quickAreaResultClearBtn").addEventListener("click", () => clearQuickArea());
+  $("quickAreaRedrawBtn").addEventListener("click", redrawQuickArea);
   $("scale1Btn").addEventListener("click", () => activateScalePoint(0));
   $("scale2Btn").addEventListener("click", () => activateScalePoint(1));
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);
@@ -2234,6 +2662,8 @@
         state.calibration.feetPerUnit = null;
         recalcAllWallsForUnits();
         updateCalibrationUI();
+      } else if (state.toolMode === "area" && state.quickArea.active) {
+        addQuickAreaPoint(sx, sy);
       } else if (state.toolMode === "trace") {
         traceWallPoint(sx, sy);
       } else {
