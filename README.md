@@ -423,3 +423,24 @@ TRACE LOCK now works as a chain break:
 Turning LOCK off clears the previous trace endpoint, so the next area will not connect back to the last dot from the prior sequence.
 
 TRACE mode itself stays active.
+
+
+## Version 2.11 — Area selection restored for material quantities
+
+AREA is now part of each saved wall takeoff.
+
+- The compact toolbar has an **AREA** selector for new traced/selected walls.
+- Full-screen mode also has the active AREA selector.
+- New walls automatically inherit the active Area.
+- Existing walls can be reassigned with the **Area** field in Selected Wall.
+- **+ Add Area** in OPTIONS creates custom project areas.
+- Default project areas are General and Area A through Area F.
+- Takeoff Markups now shows an Area column and can filter by Area.
+- Material Summary has **Materials for: All Areas / selected Area**.
+- Selecting the active Area automatically switches Material Summary to that Area so its material quantities are immediately visible.
+- CSV export includes Area.
+- Areas, active Area, and the Material Summary area selection are saved with the project and portable backup.
+- Older saved projects without Area data load safely as **General**.
+
+TRACE LOCK keeps the Version 2.9 behavior:
+turning LOCK off ends the current connected sequence; turning it back on lets the next tap begin a new disconnected sequence.
