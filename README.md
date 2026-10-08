@@ -383,12 +383,28 @@ Once Full Screen is activated, ATLAS reasserts the viewer after resize/orientati
 Tracing, selecting walls, Find, Delete, pan, zoom, and other plan interactions no longer exit full screen.
 
 
-## Version 2.8 — Quick Area temporary takeoff
+## Version 2.8 — ORTHO + trace pause/resume + grouped Markups
 
-Press AREA, tap a temporary polygon around part of the plan, then CLOSE AREA.
+### Collapsible panels
+The ▲ / ▼ scroll buttons were removed from every collapsible panel. Touch swipe and mouse-wheel scrolling remain active, so the buttons no longer cover panel content.
 
-ATLAS calculates only the portions of saved wall markups that fall inside the polygon. A 40-foot wall with only 15 feet inside contributes 15 feet to the Quick Area totals.
+### TRACE LOCK is now pause/resume
+TRACE LOCK no longer sends the app back to WALL.
 
-Results show selected polygon SF, intersected wall count, clipped wall LF, studs, top/bottom track, totals grouped by Wall Type, and individual intersected walls.
+- TRACE starts recording.
+- LOCK off = pause recording.
+- LOCK on = resume the same trace chain from the same last point.
+- WALL is now the explicit way to leave trace mode.
 
-Quick Area is temporary and is not saved with the project. REDRAW or CLEAR removes the temporary selection without changing any wall markup or project total.
+### ORTHO LOCK
+A new ORTHO button is available in the normal toolbar and in full-screen mode.
+
+When enabled, each new traced wall is constrained perfectly horizontal or vertical from the previous trace point, using the dominant direction of the tapped corner.
+
+### Markups grouped by wall type
+The Markups table now groups walls by wall type.
+
+- Tap a wall-type group header to hide/show only that group.
+- **Hide Groups** collapses all wall-type groups.
+- **Show Groups** expands all groups.
+- Find, Delete, Undo, filters, totals, and individual wall selection still work.

@@ -19,7 +19,7 @@
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE</button>
       <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">LOCK</button>
-      <button id="quickAreaBtn" class="button quick-area-button" type="button" aria-pressed="false">AREA</button>
+      <button id="orthoLockBtn" class="button ortho-lock-button" type="button" aria-pressed="false">ORTHO</button>
       <span id="currentTypeBadge" class="current-type-badge compact-type-badge" role="status" aria-live="polite" title="Current wall type for new traced walls">TYPE: Unassigned</span>
 
       <details id="moreMenu" class="more-menu">
@@ -78,46 +78,13 @@
         <button id="fsWallBtn" class="button" type="button">WALL</button>
         <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
         <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
-        <button id="fsAreaBtn" class="button" type="button">AREA</button>
+        <button id="fsOrthoBtn" class="button" type="button">ORTHO</button>
         <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <button id="fsFitBtn" class="button" type="button">Fit</button>
         <button id="fsExitBtn" class="button" type="button">Exit Full Screen</button>
       </div>
       <div id="canvasWrap">
-        <div id="quickAreaToolbar" class="quick-area-toolbar hidden">
-          <span id="quickAreaInstruction">AREA: Tap boundary points</span>
-          <button id="quickAreaUndoBtn" class="mini-tool-button" type="button" disabled>UNDO POINT</button>
-          <button id="quickAreaCloseBtn" class="mini-tool-button quick-area-close" type="button" disabled>CLOSE AREA</button>
-          <button id="quickAreaClearBtn" class="mini-tool-button delete-mini" type="button">CLEAR</button>
-        </div>
-
-        <div id="quickAreaResults" class="quick-area-results hidden">
-          <div class="quick-area-results-head">
-            <strong>QUICK AREA TAKEOFF</strong>
-            <button id="quickAreaResultsCloseBtn" class="quick-area-x" type="button">✕</button>
-          </div>
-
-          <div class="quick-area-stat-grid">
-            <div><span>Selected area</span><strong id="quickAreaSquareFeet">—</strong></div>
-            <div><span>Wall length</span><strong id="quickAreaTotalLength">—</strong></div>
-            <div><span>Walls intersected</span><strong id="quickAreaWallCount">—</strong></div>
-            <div><span>Studs</span><strong id="quickAreaStudCount">—</strong></div>
-          </div>
-
-          <div id="quickAreaGroups" class="quick-area-groups"></div>
-
-          <details class="quick-area-details">
-            <summary>Individual intersected walls</summary>
-            <div id="quickAreaWallList" class="quick-area-wall-list"></div>
-          </details>
-
-          <div class="quick-area-result-actions">
-            <button id="quickAreaRedrawBtn" class="button primary" type="button">REDRAW</button>
-            <button id="quickAreaResultClearBtn" class="button" type="button">CLEAR</button>
-          </div>
-        </div>
-
         <canvas id="dxfCanvas"></canvas>
         <div id="emptyState" class="empty-state">
           <strong>Open a DXF drawing</strong>
@@ -171,10 +138,6 @@
     <span class="collapse-chevron">▾</span>
   </summary>
   <div class="collapsible-body panel-scroll-body">
-    <div class="panel-scroll-controls">
-      <button class="panel-scroll-up" type="button" aria-label="Scroll up">▲</button>
-      <button class="panel-scroll-down" type="button" aria-label="Scroll down">▼</button>
-    </div>
         <div id="selectionEmpty" class="muted">Select a line in the drawing.</div>
 
         <form id="wallForm" class="wall-form hidden">
@@ -285,10 +248,6 @@
     <span class="collapse-chevron">▾</span>
   </summary>
   <div class="collapsible-body panel-scroll-body">
-    <div class="panel-scroll-controls">
-      <button class="panel-scroll-up" type="button" aria-label="Scroll up">▲</button>
-      <button class="panel-scroll-down" type="button" aria-label="Scroll down">▼</button>
-    </div>
 <div class="panel-heading panel-heading-no-title">
           <div class="panel-heading-actions">
             <button id="editActiveWallTypeBtn" class="button compact-button" type="button" disabled>Edit Active</button>
@@ -312,10 +271,6 @@
       <details id="markupsPanel" class="panel collapsible-panel" open>
   <summary class="collapsible-summary"><span>Takeoff Markups</span><span class="collapse-chevron">▾</span></summary>
   <div class="collapsible-body panel-scroll-body">
-    <div class="panel-scroll-controls">
-      <button class="panel-scroll-up" type="button" aria-label="Scroll up">▲</button>
-      <button class="panel-scroll-down" type="button" aria-label="Scroll down">▼</button>
-    </div>
 <div class="panel-heading">
           <div>
             <h2>Takeoff Markups</h2>
@@ -330,6 +285,8 @@
               <option value="">All types</option>
             </select>
           </label>
+          <button id="collapseMarkupGroupsBtn" class="button" type="button">Hide Groups</button>
+          <button id="expandMarkupGroupsBtn" class="button" type="button">Show Groups</button>
           <button id="undoLastBtn" class="button" type="button" disabled>Undo Last</button>
           <button id="clearWallsBtn" class="button danger-soft" type="button">Clear All</button>
         </div>
@@ -357,10 +314,6 @@
       <details class="panel collapsible-panel">
   <summary class="collapsible-summary"><span>Wall Type Totals</span><span class="collapse-chevron">▾</span></summary>
   <div class="collapsible-body panel-scroll-body">
-    <div class="panel-scroll-controls">
-      <button class="panel-scroll-up" type="button" aria-label="Scroll up">▲</button>
-      <button class="panel-scroll-down" type="button" aria-label="Scroll down">▼</button>
-    </div>
 <div id="wallTypeTotals" class="summary-list muted">No walls saved yet.</div>
   </div>
 </details>
@@ -368,10 +321,6 @@
       <details class="panel collapsible-panel">
   <summary class="collapsible-summary"><span>Material Summary</span><span class="collapse-chevron">▾</span></summary>
   <div class="collapsible-body panel-scroll-body">
-    <div class="panel-scroll-controls">
-      <button class="panel-scroll-up" type="button" aria-label="Scroll up">▲</button>
-      <button class="panel-scroll-down" type="button" aria-label="Scroll down">▼</button>
-    </div>
 <div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
   </div>
 </details>
