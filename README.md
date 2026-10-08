@@ -408,3 +408,18 @@ The Markups table now groups walls by wall type.
 - **Hide Groups** collapses all wall-type groups.
 - **Show Groups** expands all groups.
 - Find, Delete, Undo, filters, totals, and individual wall selection still work.
+
+
+## Version 2.9 — New trace chain after LOCK pause
+
+TRACE LOCK now works as a chain break:
+
+1. Trace connected walls.
+2. Turn LOCK off at the last corner.
+3. Move to a different area.
+4. Turn LOCK back on.
+5. The next tap becomes a new starting point.
+
+Turning LOCK off clears the previous trace endpoint, so the next area will not connect back to the last dot from the prior sequence.
+
+TRACE mode itself stays active.

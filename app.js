@@ -715,7 +715,7 @@
     const orthoText = state.trace.ortho ? " • ORTHO" : "";
 
     if (!state.trace.locked) {
-      $("hintbar").textContent = `TRACE PAUSED${typeText}${orthoText} • tap LOCK to continue`;
+      $("hintbar").textContent = `TRACE PAUSED${typeText}${orthoText} • LOCK ON starts a new chain`;
     } else if (!state.trace.lastPoint) {
       $("hintbar").textContent = `TRACE: Tap first corner${typeText}${runText}${orthoText}`;
     } else {
@@ -731,9 +731,13 @@
 
     state.trace.locked = !state.trace.locked;
 
-    // TRACE LOCK is now a real pause/resume control.
-    // Turning it OFF never kicks the user back to WALL and never clears
-    // the current trace point. Turning it ON resumes the same chain.
+    // LOCK OFF means: finish the current trace chain and pause.
+    // Clear the last point so LOCK ON starts a brand-new chain elsewhere.
+    if (!state.trace.locked) {
+      state.trace.lastPoint = null;
+    }
+
+    // Remain in TRACE mode. LOCK controls recording only.
     if (state.toolMode !== "trace") {
       state.toolMode = "trace";
       state.calibration.activePoint = null;
