@@ -425,36 +425,24 @@ Turning LOCK off clears the previous trace endpoint, so the next area will not c
 TRACE mode itself stays active.
 
 
-## Version 2.12 — Window Area material selection
+## Version 2.14 — Restore four-point temporary AREA totals
 
-This restores AREA as a drawing-window selection, not a named project category.
+AREA is restored as a temporary four-point takeoff tool.
 
 Workflow:
 
-1. Open **VIEW → SELECT AREA** (or tap **AREA** in full screen).
-2. Drag a rectangle around the portion of the drawing you want to inspect.
-3. ATLAS finds the saved takeoff walls touched by that rectangle.
-4. **Material Summary** and **Wall Type Totals** recalculate using only those selected walls.
-5. Selected-area takeoff walls are highlighted green on the plan.
-6. Tap **CLEAR AREA** to return totals to the complete takeoff.
+1. Tap **AREA SELECT**.
+2. Tap four boundary points around the portion of the drawing you want to inspect.
+3. Press **CLOSE AREA**.
+4. ATLAS temporarily totals only the saved takeoff walls inside/intersecting that closed area.
+5. The temporary totals show:
+   - Wall count
+   - Stud count
+   - Linear feet
+6. Material Summary and Wall Type Totals also use only the closed temporary area.
+7. Walls included in the temporary area highlight green.
+8. Press **CLEAR** to remove the temporary area and return to full-project totals.
 
-The selection box is stored in drawing/world coordinates, so it stays aligned with the plan while panning or zooming.
+The closed area is temporary and is not saved as a named project area.
 
-This is intentionally not Area A / Area B / named-area assignment. It behaves like a SketchUp-style window selection for temporary material totals.
-
-The Version 2.9 TRACE LOCK behavior remains unchanged.
-
-
-## Version 2.13 — AREA MATERIALS button made permanently visible
-
-The area-material selection feature from Version 2.12 was working, but the control was hidden inside the VIEW dropdown.
-
-Version 2.13 moves it directly onto the viewer toolbar:
-
-- **AREA MATERIALS** — always visible beside the drawing.
-- **CLEAR** — clears the selected material window and returns totals to the complete takeoff.
-- Full-screen mode also uses the explicit **AREA MATERIALS** label.
-
-Tap AREA MATERIALS, then drag a box around the portion of the plan you want to total. Material Summary and Wall Type Totals immediately recalculate for the walls touched by that box.
-
-No named Area A / B / C system is used.
+Version 2.9 TRACE LOCK behavior remains unchanged.

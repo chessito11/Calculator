@@ -43,13 +43,10 @@
     editingWallTypeOriginalName: "",
     trace: { lastPoint: null, locked: false, ortho: false },
     markupCollapsedGroups: new Set(),
-    areaSelection: {
-      active: false,
+    tempArea: {
       selecting: false,
-      pointerId: null,
-      start: null,
-      current: null,
-      bounds: null,
+      closed: false,
+      points: [],
       wallIds: new Set()
     },
     history: [],
@@ -216,156 +213,180 @@
   }
 
 
-  function normalizedAreaBounds(a, b) {
-    return {
-      minX: Math.min(a.x, b.x),
-      minY: Math.min(a.y, b.y),
-      maxX: Math.max(a.x, b.x),
-      maxY: Math.max(a.y, b.y)
-    };
+  function pointInPolygon(point, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      const intersect = ((yi > point.y) !== (yj > point.y)) &&
+        (point.x < (xj - xi) * (point.y - yi) / ((yj - yi) || 1e-12) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
   }
 
-  function pointInsideRect(p, r) {
-    return p.x >= r.minX && p.x <= r.maxX && p.y >= r.minY && p.y <= r.maxY;
+  function orient(a, b, c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   }
 
-  function ccw(a, b, c) {
-    return (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  function onSegment(a, b, p) {
+    return Math.min(a.x,b.x) - 1e-9 <= p.x && p.x <= Math.max(a.x,b.x) + 1e-9 &&
+      Math.min(a.y,b.y) - 1e-9 <= p.y && p.y <= Math.max(a.y,b.y) + 1e-9;
   }
 
-  function linesIntersect(a, b, c, d) {
-    return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
+  function segmentsIntersect(a, b, c, d) {
+    const o1 = orient(a,b,c), o2 = orient(a,b,d), o3 = orient(c,d,a), o4 = orient(c,d,b);
+    if ((o1 > 0 && o2 < 0 || o1 < 0 && o2 > 0) &&
+        (o3 > 0 && o4 < 0 || o3 < 0 && o4 > 0)) return true;
+    if (Math.abs(o1) < 1e-9 && onSegment(a,b,c)) return true;
+    if (Math.abs(o2) < 1e-9 && onSegment(a,b,d)) return true;
+    if (Math.abs(o3) < 1e-9 && onSegment(c,d,a)) return true;
+    if (Math.abs(o4) < 1e-9 && onSegment(c,d,b)) return true;
+    return false;
   }
 
-  function segmentIntersectsArea(segment, r) {
-    const a = { x: segment.x1, y: segment.y1 };
-    const b = { x: segment.x2, y: segment.y2 };
+  function wallInsideTemporaryArea(segment, polygon) {
+    const a = {x: segment.x1, y: segment.y1};
+    const b = {x: segment.x2, y: segment.y2};
+    const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2};
 
-    if (pointInsideRect(a, r) || pointInsideRect(b, r)) return true;
+    if (pointInPolygon(a, polygon) || pointInPolygon(b, polygon) || pointInPolygon(mid, polygon)) {
+      return true;
+    }
 
-    const bl = { x: r.minX, y: r.minY };
-    const br = { x: r.maxX, y: r.minY };
-    const tr = { x: r.maxX, y: r.maxY };
-    const tl = { x: r.minX, y: r.maxY };
-
-    return linesIntersect(a, b, bl, br) ||
-      linesIntersect(a, b, br, tr) ||
-      linesIntersect(a, b, tr, tl) ||
-      linesIntersect(a, b, tl, bl);
+    for (let i = 0; i < polygon.length; i++) {
+      const c = polygon[i];
+      const d = polygon[(i+1) % polygon.length];
+      if (segmentsIntersect(a,b,c,d)) return true;
+    }
+    return false;
   }
 
-  function updateAreaSelectionWalls() {
-    state.areaSelection.wallIds = new Set();
-    const bounds = state.areaSelection.bounds;
-    if (!bounds) return;
+  function updateTemporaryAreaWalls() {
+    state.tempArea.wallIds = new Set();
+    if (!state.tempArea.closed || state.tempArea.points.length < 3) return;
 
     for (const [id] of state.walls) {
       const segment = state.segments.find(s => s.id === id);
-      if (segment && segmentIntersectsArea(segment, bounds)) {
-        state.areaSelection.wallIds.add(id);
+      if (segment && wallInsideTemporaryArea(segment, state.tempArea.points)) {
+        state.tempArea.wallIds.add(id);
       }
     }
   }
 
-  function getWallsForMaterialSummary(walls) {
-    if (!state.areaSelection.bounds) return walls;
-    updateAreaSelectionWalls();
-    return walls.filter(w => state.areaSelection.wallIds.has(w.segmentId));
+  function updateTemporaryAreaUI() {
+    const count = state.tempArea.points.length;
+    const closed = state.tempArea.closed;
+
+    $("areaSelectBtn").classList.toggle("active-tool", state.tempArea.selecting);
+    $("areaSelectBtn").textContent = state.tempArea.selecting ? `POINT ${Math.min(count+1,4)} / 4` : "AREA SELECT";
+    $("closeAreaBtn").disabled = count < 3 || closed;
+    $("clearTempAreaBtn").disabled = !count && !closed;
+
+    $("fsAreaSelectBtn").classList.toggle("active-tool", state.tempArea.selecting);
+    $("fsAreaSelectBtn").textContent = state.tempArea.selecting ? `POINT ${Math.min(count+1,4)} / 4` : "AREA SELECT";
+    $("fsCloseAreaBtn").disabled = count < 3 || closed;
+    $("fsClearTempAreaBtn").disabled = !count && !closed;
   }
 
-  function updateAreaSelectionUI() {
-    const active = state.areaSelection.active;
-    const hasSelection = !!state.areaSelection.bounds;
-    const count = state.areaSelection.wallIds.size;
-
-    $("selectAreaBtn").classList.toggle("active-tool", active);
-    $("selectAreaBtn").textContent = active ? "DRAW BOX…" : "AREA MATERIALS";
-    $("clearAreaBtn").disabled = !hasSelection;
-
-    $("fsAreaBtn").classList.toggle("active-tool", active);
-    $("fsAreaBtn").textContent = active ? "DRAW BOX…" : "AREA MATERIALS";
-    $("fsClearAreaBtn").disabled = !hasSelection;
-
-    const badge = $("areaSelectionBadge");
-    if (hasSelection) {
-      badge.textContent = `Selected area • ${count} wall${count === 1 ? "" : "s"}`;
-    } else {
-      badge.textContent = "All saved walls";
-    }
-  }
-
-  function activateAreaSelection() {
+  function startTemporaryAreaSelection() {
     if (!state.segments.length) {
       alert("Open a DXF drawing first.");
       return;
     }
-
-    state.areaSelection.active = true;
-    state.areaSelection.selecting = false;
-    state.areaSelection.pointerId = null;
-    state.areaSelection.start = null;
-    state.areaSelection.current = null;
-
+    state.tempArea = {
+      selecting: true,
+      closed: false,
+      points: [],
+      wallIds: new Set()
+    };
     if ($("viewerOptionsMenu")) $("viewerOptionsMenu").open = false;
-    $("hintbar").textContent = "AREA SELECT: drag a box around the walls you want to total.";
-    updateAreaSelectionUI();
+    $("hintbar").textContent = "AREA SELECT: tap corner 1 of 4.";
+    updateTemporaryAreaUI();
+    refreshTemporaryAreaTotals();
     draw();
   }
 
-  function clearAreaSelection() {
-    state.areaSelection.active = false;
-    state.areaSelection.selecting = false;
-    state.areaSelection.pointerId = null;
-    state.areaSelection.start = null;
-    state.areaSelection.current = null;
-    state.areaSelection.bounds = null;
-    state.areaSelection.wallIds = new Set();
+  function addTemporaryAreaPoint(screenX, screenY) {
+    if (!state.tempArea.selecting || state.tempArea.closed) return false;
+    if (state.tempArea.points.length >= 4) return true;
 
-    updateAreaSelectionUI();
-    refreshTables();
+    const world = screenToWorld(screenX, screenY);
+    state.tempArea.points.push({x: world.x, y: world.y});
+
+    const count = state.tempArea.points.length;
+    if (count < 4) {
+      $("hintbar").textContent = `AREA SELECT: tap corner ${count+1} of 4.`;
+    } else {
+      state.tempArea.selecting = false;
+      $("hintbar").textContent = "4 area points selected • press CLOSE AREA for temporary totals.";
+    }
+
+    updateTemporaryAreaUI();
     draw();
-    $("hintbar").textContent = "Area cleared • Material Summary shows all saved walls.";
+    return true;
   }
 
-  function finishAreaSelection() {
-    const start = state.areaSelection.start;
-    const current = state.areaSelection.current;
-
-    state.areaSelection.selecting = false;
-    state.areaSelection.pointerId = null;
-    state.areaSelection.active = false;
-
-    if (!start || !current) {
-      updateAreaSelectionUI();
-      draw();
-      return;
-    }
-
-    const bounds = normalizedAreaBounds(start, current);
-    const minSize = 5 / Math.max(state.view.scale, 0.000001);
-
-    if ((bounds.maxX - bounds.minX) < minSize || (bounds.maxY - bounds.minY) < minSize) {
-      state.areaSelection.start = null;
-      state.areaSelection.current = null;
-      updateAreaSelectionUI();
-      $("hintbar").textContent = "AREA SELECT: drag a larger box.";
-      draw();
-      return;
-    }
-
-    state.areaSelection.bounds = bounds;
-    state.areaSelection.start = null;
-    state.areaSelection.current = null;
-
-    updateAreaSelectionWalls();
-    updateAreaSelectionUI();
+  function closeTemporaryArea() {
+    if (state.tempArea.points.length < 3) return;
+    state.tempArea.closed = true;
+    state.tempArea.selecting = false;
+    updateTemporaryAreaWalls();
+    updateTemporaryAreaUI();
     refreshTables();
+    refreshTemporaryAreaTotals();
     draw();
 
-    const count = state.areaSelection.wallIds.size;
-    $("hintbar").textContent = count
-      ? `AREA SELECTED: Material Summary now shows ${count} wall${count === 1 ? "" : "s"} in the box.`
-      : "AREA SELECTED: No saved takeoff walls are inside this box.";
+    const count = state.tempArea.wallIds.size;
+    $("hintbar").textContent = `AREA CLOSED • ${count} saved wall${count === 1 ? "" : "s"} included in temporary totals.`;
+  }
+
+  function clearTemporaryArea() {
+    state.tempArea = {
+      selecting: false,
+      closed: false,
+      points: [],
+      wallIds: new Set()
+    };
+    updateTemporaryAreaUI();
+    refreshTables();
+    refreshTemporaryAreaTotals();
+    draw();
+    $("hintbar").textContent = "Temporary area cleared • full takeoff totals restored.";
+  }
+
+  function getTemporaryAreaWalls(walls) {
+    if (!state.tempArea.closed) return walls;
+    updateTemporaryAreaWalls();
+    return walls.filter(w => state.tempArea.wallIds.has(w.segmentId));
+  }
+
+  function refreshTemporaryAreaTotals() {
+    const el = $("temporaryAreaTotals");
+    if (!el) return;
+
+    if (!state.tempArea.closed) {
+      el.className = "temporary-area-totals muted";
+      el.textContent = state.tempArea.points.length
+        ? `${state.tempArea.points.length} area point${state.tempArea.points.length === 1 ? "" : "s"} selected • press CLOSE AREA`
+        : "No temporary area closed.";
+      return;
+    }
+
+    const walls = getTemporaryAreaWalls([...state.walls.values()]);
+    let studs = 0;
+    let lf = 0;
+    for (const w of walls) {
+      studs += Number(w.studQty || 0);
+      lf += Number(w.lengthFt || 0);
+    }
+
+    el.className = "temporary-area-totals";
+    el.innerHTML = `
+      <div class="temp-total-card"><span>Walls</span><strong>${walls.length}</strong></div>
+      <div class="temp-total-card"><span>Studs</span><strong>${studs}</strong></div>
+      <div class="temp-total-card"><span>Linear Feet</span><strong>${lf.toFixed(1)} LF</strong></div>
+    `;
   }
 
   function resizeCanvas() {
@@ -423,21 +444,9 @@
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      const inSelectedArea = !!state.areaSelection.bounds && state.areaSelection.wallIds.has(s.id);
-      const areaActive = !!state.areaSelection.bounds;
-
-      ctx.lineWidth = isSelected ? 4 : (wall ? (inSelectedArea ? 3.2 : 2.4) : 1);
-
-      if (isSelected) {
-        ctx.strokeStyle = "#ffd166";
-      } else if (wall && areaActive && inSelectedArea) {
-        ctx.strokeStyle = "#65d68a";
-      } else if (wall && areaActive && !inSelectedArea) {
-        ctx.strokeStyle = "#31506f";
-      } else {
-        ctx.strokeStyle = wall ? "#4da3ff" : "#d8dde5";
-      }
-
+      const inTempArea = state.tempArea.closed && state.tempArea.wallIds.has(s.id);
+      ctx.lineWidth = isSelected ? 4 : (wall ? (inTempArea ? 3.2 : 2.4) : 1);
+      ctx.strokeStyle = isSelected ? "#ffd166" : (wall ? (inTempArea ? "#65d68a" : "#4da3ff") : "#d8dde5");
       ctx.stroke();
 
       if (wall) {
@@ -455,50 +464,50 @@
       }
     }
 
-    drawAreaSelectionOverlay();
+    drawTemporaryAreaOverlay();
     drawCalibrationOverlay();
     drawTraceOverlay();
   }
 
-  function drawAreaSelectionOverlay() {
-    const previewStart = state.areaSelection.start;
-    const previewCurrent = state.areaSelection.current;
-    const bounds = state.areaSelection.selecting && previewStart && previewCurrent
-      ? normalizedAreaBounds(previewStart, previewCurrent)
-      : state.areaSelection.bounds;
-
-    if (!bounds) return;
-
-    const a = worldToScreen(bounds.minX, bounds.maxY);
-    const b = worldToScreen(bounds.maxX, bounds.minY);
-
-    const x = Math.min(a.x, b.x);
-    const y = Math.min(a.y, b.y);
-    const w = Math.abs(b.x - a.x);
-    const h = Math.abs(b.y - a.y);
+  function drawTemporaryAreaOverlay() {
+    const pts = state.tempArea.points;
+    if (!pts.length) return;
 
     ctx.save();
-    ctx.fillStyle = "rgba(101,214,138,.10)";
-    ctx.strokeStyle = "#65d68a";
     ctx.lineWidth = 2;
-    ctx.setLineDash([8, 6]);
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeRect(x, y, w, h);
+    ctx.strokeStyle = state.tempArea.closed ? "#65d68a" : "#f4c95d";
+    ctx.fillStyle = state.tempArea.closed ? "rgba(101,214,138,.10)" : "rgba(244,201,93,.06)";
+    ctx.setLineDash(state.tempArea.closed ? [] : [7,5]);
+
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const s = worldToScreen(p.x, p.y);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    });
+
+    if (state.tempArea.closed && pts.length >= 3) {
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.stroke();
     ctx.setLineDash([]);
 
-    const label = state.areaSelection.selecting
-      ? "SELECT AREA"
-      : `MATERIAL AREA • ${state.areaSelection.wallIds.size} WALL${state.areaSelection.wallIds.size === 1 ? "" : "S"}`;
+    pts.forEach((p, i) => {
+      const s = worldToScreen(p.x, p.y);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 5, 0, Math.PI*2);
+      ctx.fillStyle = "#11151b";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = state.tempArea.closed ? "#65d68a" : "#f4c95d";
+      ctx.stroke();
 
-    ctx.font = "bold 11px system-ui";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    const tw = ctx.measureText(label).width + 12;
-    const ly = Math.max(18, y - 4);
-    ctx.fillStyle = "#11151b";
-    ctx.fillRect(x, ly - 18, tw, 18);
-    ctx.fillStyle = "#8ef0aa";
-    ctx.fillText(label, x + 6, ly - 3);
+      ctx.font = "bold 10px system-ui";
+      ctx.fillStyle = state.tempArea.closed ? "#8ef0aa" : "#ffe399";
+      ctx.fillText(String(i+1), s.x+7, s.y-7);
+    });
+
     ctx.restore();
   }
 
@@ -1627,12 +1636,12 @@
     updateUndoButton();
     refreshWallTypeTotals(walls);
     refreshMaterialSummary(walls);
+    refreshTemporaryAreaTotals();
   }
 
   function refreshWallTypeTotals(walls) {
+    walls = getTemporaryAreaWalls(walls);
     const el = $("wallTypeTotals");
-    walls = getWallsForMaterialSummary(walls);
-
     if (!walls.length) {
       el.className = "summary-list muted";
       el.textContent = "No walls saved yet.";
@@ -1672,15 +1681,11 @@
   }
 
   function refreshMaterialSummary(walls) {
+    walls = getTemporaryAreaWalls(walls);
     const el = $("materialSummary");
-    walls = getWallsForMaterialSummary(walls);
-    updateAreaSelectionUI();
-
     if (!walls.length) {
       el.className = "summary-list muted";
-      el.textContent = state.areaSelection.bounds
-        ? "No saved takeoff walls in the selected area."
-        : "No walls saved yet.";
+      el.textContent = "No walls saved yet.";
       return;
     }
     el.className = "summary-list";
@@ -2033,13 +2038,10 @@
       state.history = [];
       state.bounds = computeBounds(state.segments);
       state.selectedId = null;
-      state.areaSelection = {
-        active: false,
+      state.tempArea = {
         selecting: false,
-        pointerId: null,
-        start: null,
-        current: null,
-        bounds: null,
+        closed: false,
+        points: [],
         wallIds: new Set()
       };
       $("emptyState").style.display = state.segments.length ? "none" : "flex";
@@ -2220,13 +2222,11 @@
   $("projectImportFile").addEventListener("change", e => importProjectBackup(e.target.files?.[0]));
   window.addEventListener("keydown", e => {
     if (e.key === "Escape" && !$("projectDialog").classList.contains("hidden")) closeProjectDialog();
-    if (e.key === "Escape" && state.areaSelection.active) {
-      state.areaSelection.active = false;
-      state.areaSelection.selecting = false;
-      state.areaSelection.pointerId = null;
-      state.areaSelection.start = null;
-      state.areaSelection.current = null;
-      updateAreaSelectionUI();
+    if (e.key === "Escape" && state.tempArea.selecting) {
+      state.tempArea.selecting = false;
+      state.tempArea.points = [];
+      updateTemporaryAreaUI();
+      refreshTemporaryAreaTotals();
       draw();
       return;
     }
@@ -2370,13 +2370,10 @@
     state.walls.clear();
     state.history = [];
     state.selectedId = null;
-    state.areaSelection = {
-      active: false,
+    state.tempArea = {
       selecting: false,
-      pointerId: null,
-      start: null,
-      current: null,
-      bounds: null,
+      closed: false,
+      points: [],
       wallIds: new Set()
     };
 
@@ -2419,10 +2416,13 @@
   $("collapsePanelsBtn")?.addEventListener("click", () => setAllSidePanels(false));
   $("expandPanelsBtn")?.addEventListener("click", () => setAllSidePanels(true));
 
-  $("selectAreaBtn").addEventListener("click", activateAreaSelection);
-  $("clearAreaBtn").addEventListener("click", clearAreaSelection);
-  $("fsAreaBtn").addEventListener("click", activateAreaSelection);
-  $("fsClearAreaBtn").addEventListener("click", clearAreaSelection);
+  $("areaSelectBtn").addEventListener("click", startTemporaryAreaSelection);
+  $("closeAreaBtn").addEventListener("click", closeTemporaryArea);
+  $("clearTempAreaBtn").addEventListener("click", clearTemporaryArea);
+
+  $("fsAreaSelectBtn").addEventListener("click", startTemporaryAreaSelection);
+  $("fsCloseAreaBtn").addEventListener("click", closeTemporaryArea);
+  $("fsClearTempAreaBtn").addEventListener("click", clearTemporaryArea);
 
   $("findSelectedBtn").addEventListener("click", () => {
     if (state.selectedId && state.walls.has(state.selectedId)) {
@@ -2545,21 +2545,6 @@
   }, {passive:false});
 
   canvas.addEventListener("pointerdown", (e) => {
-    if (state.areaSelection.active) {
-      canvas.setPointerCapture(e.pointerId);
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const p = screenToWorld(sx, sy);
-
-      state.areaSelection.selecting = true;
-      state.areaSelection.pointerId = e.pointerId;
-      state.areaSelection.start = p;
-      state.areaSelection.current = p;
-      draw();
-      return;
-    }
-
     canvas.setPointerCapture(e.pointerId);
     state.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
     if (state.pointers.size === 1) {
@@ -2575,15 +2560,6 @@
   });
 
   canvas.addEventListener("pointermove", (e) => {
-    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      state.areaSelection.current = screenToWorld(sx, sy);
-      draw();
-      return;
-    }
-
     if (!state.pointers.has(e.pointerId)) return;
     state.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
 
@@ -2614,16 +2590,14 @@
   });
 
   canvas.addEventListener("pointerup", (e) => {
-    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      state.areaSelection.current = screenToWorld(sx, sy);
-      finishAreaSelection();
+    const rect = canvas.getBoundingClientRect();
+
+    if (state.tempArea.selecting) {
+      addTemporaryAreaPoint(e.clientX - rect.left, e.clientY - rect.top);
+      state.pointers.delete(e.pointerId);
       return;
     }
 
-    const rect = canvas.getBoundingClientRect();
     const hadOne = state.pointers.size === 1;
     state.pointers.delete(e.pointerId);
 
@@ -2657,16 +2631,6 @@
   });
 
   canvas.addEventListener("pointercancel", (e) => {
-    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
-      state.areaSelection.selecting = false;
-      state.areaSelection.pointerId = null;
-      state.areaSelection.start = null;
-      state.areaSelection.current = null;
-      updateAreaSelectionUI();
-      draw();
-      return;
-    }
-
     state.pointers.delete(e.pointerId);
     if (!state.pointers.size) {
       state.dragging = false;
@@ -2682,7 +2646,8 @@
   updateCalibrationUI();
   updateTraceUI();
   updateSelectedActionButtons();
-  updateAreaSelectionUI();
+  updateTemporaryAreaUI();
+  refreshTemporaryAreaTotals();
   updateCurrentTypeBadge();
   updateProjectTitle();
   syncFullscreenTools();

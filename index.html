@@ -56,9 +56,10 @@
       <div class="viewer-toolbar compact-viewer-toolbar">
         <div id="fileStatus">No DXF loaded</div>
 
-        <div class="viewer-area-material-actions">
-          <button id="selectAreaBtn" class="mini-tool-button area-material-button" type="button">AREA MATERIALS</button>
-          <button id="clearAreaBtn" class="mini-tool-button area-clear-button" type="button" disabled>CLEAR</button>
+        <div class="viewer-area-temp-actions">
+          <button id="areaSelectBtn" class="mini-tool-button area-select-button" type="button">AREA SELECT</button>
+          <button id="closeAreaBtn" class="mini-tool-button area-close-button" type="button" disabled>CLOSE AREA</button>
+          <button id="clearTempAreaBtn" class="mini-tool-button area-clear-button" type="button" disabled>CLEAR</button>
         </div>
 
         <details id="viewerOptionsMenu" class="viewer-options-menu">
@@ -85,8 +86,9 @@
         <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
         <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
         <button id="fsOrthoBtn" class="button" type="button">ORTHO</button>
-        <button id="fsAreaBtn" class="button area-material-button" type="button">AREA MATERIALS</button>
-        <button id="fsClearAreaBtn" class="button area-clear-button" type="button" disabled>CLEAR</button>
+        <button id="fsAreaSelectBtn" class="button" type="button">AREA SELECT</button>
+        <button id="fsCloseAreaBtn" class="button" type="button" disabled>CLOSE AREA</button>
+        <button id="fsClearTempAreaBtn" class="button" type="button" disabled>CLEAR</button>
         <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <button id="fsFitBtn" class="button" type="button">Fit</button>
@@ -329,8 +331,8 @@
       <details class="panel collapsible-panel">
   <summary class="collapsible-summary"><span>Material Summary</span><span class="collapse-chevron">▾</span></summary>
   <div class="collapsible-body panel-scroll-body">
-<div class="area-material-status">
-      <span id="areaSelectionBadge" class="badge">All saved walls</span>
+<div id="temporaryAreaTotals" class="temporary-area-totals muted">
+      No temporary area closed.
     </div>
     <div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
   </div>
