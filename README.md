@@ -425,22 +425,21 @@ Turning LOCK off clears the previous trace endpoint, so the next area will not c
 TRACE mode itself stays active.
 
 
-## Version 2.11 — Area selection restored for material quantities
+## Version 2.12 — Window Area material selection
 
-AREA is now part of each saved wall takeoff.
+This restores AREA as a drawing-window selection, not a named project category.
 
-- The compact toolbar has an **AREA** selector for new traced/selected walls.
-- Full-screen mode also has the active AREA selector.
-- New walls automatically inherit the active Area.
-- Existing walls can be reassigned with the **Area** field in Selected Wall.
-- **+ Add Area** in OPTIONS creates custom project areas.
-- Default project areas are General and Area A through Area F.
-- Takeoff Markups now shows an Area column and can filter by Area.
-- Material Summary has **Materials for: All Areas / selected Area**.
-- Selecting the active Area automatically switches Material Summary to that Area so its material quantities are immediately visible.
-- CSV export includes Area.
-- Areas, active Area, and the Material Summary area selection are saved with the project and portable backup.
-- Older saved projects without Area data load safely as **General**.
+Workflow:
 
-TRACE LOCK keeps the Version 2.9 behavior:
-turning LOCK off ends the current connected sequence; turning it back on lets the next tap begin a new disconnected sequence.
+1. Open **VIEW → SELECT AREA** (or tap **AREA** in full screen).
+2. Drag a rectangle around the portion of the drawing you want to inspect.
+3. ATLAS finds the saved takeoff walls touched by that rectangle.
+4. **Material Summary** and **Wall Type Totals** recalculate using only those selected walls.
+5. Selected-area takeoff walls are highlighted green on the plan.
+6. Tap **CLEAR AREA** to return totals to the complete takeoff.
+
+The selection box is stored in drawing/world coordinates, so it stays aligned with the plan while panning or zooming.
+
+This is intentionally not Area A / Area B / named-area assignment. It behaves like a SketchUp-style window selection for temporary material totals.
+
+The Version 2.9 TRACE LOCK behavior remains unchanged.

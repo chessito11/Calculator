@@ -40,12 +40,18 @@
     toolMode: "wall",
     wallTypes: loadWallTypes(),
     activeWallType: "",
-    areas: ["General", "Area A", "Area B", "Area C", "Area D", "Area E", "Area F"],
-    activeArea: "General",
-    materialAreaFilter: "",
     editingWallTypeOriginalName: "",
     trace: { lastPoint: null, locked: false, ortho: false },
     markupCollapsedGroups: new Set(),
+    areaSelection: {
+      active: false,
+      selecting: false,
+      pointerId: null,
+      start: null,
+      current: null,
+      bounds: null,
+      wallIds: new Set()
+    },
     history: [],
     view: { scale: 1, offsetX: 0, offsetY: 0 },
     bounds: null,
@@ -209,6 +215,159 @@
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
   }
 
+
+  function normalizedAreaBounds(a, b) {
+    return {
+      minX: Math.min(a.x, b.x),
+      minY: Math.min(a.y, b.y),
+      maxX: Math.max(a.x, b.x),
+      maxY: Math.max(a.y, b.y)
+    };
+  }
+
+  function pointInsideRect(p, r) {
+    return p.x >= r.minX && p.x <= r.maxX && p.y >= r.minY && p.y <= r.maxY;
+  }
+
+  function ccw(a, b, c) {
+    return (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  }
+
+  function linesIntersect(a, b, c, d) {
+    return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
+  }
+
+  function segmentIntersectsArea(segment, r) {
+    const a = { x: segment.x1, y: segment.y1 };
+    const b = { x: segment.x2, y: segment.y2 };
+
+    if (pointInsideRect(a, r) || pointInsideRect(b, r)) return true;
+
+    const bl = { x: r.minX, y: r.minY };
+    const br = { x: r.maxX, y: r.minY };
+    const tr = { x: r.maxX, y: r.maxY };
+    const tl = { x: r.minX, y: r.maxY };
+
+    return linesIntersect(a, b, bl, br) ||
+      linesIntersect(a, b, br, tr) ||
+      linesIntersect(a, b, tr, tl) ||
+      linesIntersect(a, b, tl, bl);
+  }
+
+  function updateAreaSelectionWalls() {
+    state.areaSelection.wallIds = new Set();
+    const bounds = state.areaSelection.bounds;
+    if (!bounds) return;
+
+    for (const [id] of state.walls) {
+      const segment = state.segments.find(s => s.id === id);
+      if (segment && segmentIntersectsArea(segment, bounds)) {
+        state.areaSelection.wallIds.add(id);
+      }
+    }
+  }
+
+  function getWallsForMaterialSummary(walls) {
+    if (!state.areaSelection.bounds) return walls;
+    updateAreaSelectionWalls();
+    return walls.filter(w => state.areaSelection.wallIds.has(w.segmentId));
+  }
+
+  function updateAreaSelectionUI() {
+    const active = state.areaSelection.active;
+    const hasSelection = !!state.areaSelection.bounds;
+    const count = state.areaSelection.wallIds.size;
+
+    $("selectAreaBtn").classList.toggle("active-tool", active);
+    $("selectAreaBtn").textContent = active ? "DRAW AREA…" : "SELECT AREA";
+    $("clearAreaBtn").disabled = !hasSelection;
+
+    $("fsAreaBtn").classList.toggle("active-tool", active);
+    $("fsAreaBtn").textContent = active ? "DRAW AREA…" : "AREA";
+    $("fsClearAreaBtn").disabled = !hasSelection;
+
+    const badge = $("areaSelectionBadge");
+    if (hasSelection) {
+      badge.textContent = `Selected area • ${count} wall${count === 1 ? "" : "s"}`;
+    } else {
+      badge.textContent = "All saved walls";
+    }
+  }
+
+  function activateAreaSelection() {
+    if (!state.segments.length) {
+      alert("Open a DXF drawing first.");
+      return;
+    }
+
+    state.areaSelection.active = true;
+    state.areaSelection.selecting = false;
+    state.areaSelection.pointerId = null;
+    state.areaSelection.start = null;
+    state.areaSelection.current = null;
+
+    if ($("viewerOptionsMenu")) $("viewerOptionsMenu").open = false;
+    $("hintbar").textContent = "AREA SELECT: drag a box around the walls you want to total.";
+    updateAreaSelectionUI();
+    draw();
+  }
+
+  function clearAreaSelection() {
+    state.areaSelection.active = false;
+    state.areaSelection.selecting = false;
+    state.areaSelection.pointerId = null;
+    state.areaSelection.start = null;
+    state.areaSelection.current = null;
+    state.areaSelection.bounds = null;
+    state.areaSelection.wallIds = new Set();
+
+    updateAreaSelectionUI();
+    refreshTables();
+    draw();
+    $("hintbar").textContent = "Area cleared • Material Summary shows all saved walls.";
+  }
+
+  function finishAreaSelection() {
+    const start = state.areaSelection.start;
+    const current = state.areaSelection.current;
+
+    state.areaSelection.selecting = false;
+    state.areaSelection.pointerId = null;
+    state.areaSelection.active = false;
+
+    if (!start || !current) {
+      updateAreaSelectionUI();
+      draw();
+      return;
+    }
+
+    const bounds = normalizedAreaBounds(start, current);
+    const minSize = 5 / Math.max(state.view.scale, 0.000001);
+
+    if ((bounds.maxX - bounds.minX) < minSize || (bounds.maxY - bounds.minY) < minSize) {
+      state.areaSelection.start = null;
+      state.areaSelection.current = null;
+      updateAreaSelectionUI();
+      $("hintbar").textContent = "AREA SELECT: drag a larger box.";
+      draw();
+      return;
+    }
+
+    state.areaSelection.bounds = bounds;
+    state.areaSelection.start = null;
+    state.areaSelection.current = null;
+
+    updateAreaSelectionWalls();
+    updateAreaSelectionUI();
+    refreshTables();
+    draw();
+
+    const count = state.areaSelection.wallIds.size;
+    $("hintbar").textContent = count
+      ? `AREA SELECTED: Material Summary now shows ${count} wall${count === 1 ? "" : "s"} in the box.`
+      : "AREA SELECTED: No saved takeoff walls are inside this box.";
+  }
+
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -264,8 +423,21 @@
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      ctx.lineWidth = isSelected ? 4 : (wall ? 2.4 : 1);
-      ctx.strokeStyle = isSelected ? "#ffd166" : (wall ? "#4da3ff" : "#d8dde5");
+      const inSelectedArea = !!state.areaSelection.bounds && state.areaSelection.wallIds.has(s.id);
+      const areaActive = !!state.areaSelection.bounds;
+
+      ctx.lineWidth = isSelected ? 4 : (wall ? (inSelectedArea ? 3.2 : 2.4) : 1);
+
+      if (isSelected) {
+        ctx.strokeStyle = "#ffd166";
+      } else if (wall && areaActive && inSelectedArea) {
+        ctx.strokeStyle = "#65d68a";
+      } else if (wall && areaActive && !inSelectedArea) {
+        ctx.strokeStyle = "#31506f";
+      } else {
+        ctx.strokeStyle = wall ? "#4da3ff" : "#d8dde5";
+      }
+
       ctx.stroke();
 
       if (wall) {
@@ -283,8 +455,51 @@
       }
     }
 
+    drawAreaSelectionOverlay();
     drawCalibrationOverlay();
     drawTraceOverlay();
+  }
+
+  function drawAreaSelectionOverlay() {
+    const previewStart = state.areaSelection.start;
+    const previewCurrent = state.areaSelection.current;
+    const bounds = state.areaSelection.selecting && previewStart && previewCurrent
+      ? normalizedAreaBounds(previewStart, previewCurrent)
+      : state.areaSelection.bounds;
+
+    if (!bounds) return;
+
+    const a = worldToScreen(bounds.minX, bounds.maxY);
+    const b = worldToScreen(bounds.maxX, bounds.minY);
+
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const w = Math.abs(b.x - a.x);
+    const h = Math.abs(b.y - a.y);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(101,214,138,.10)";
+    ctx.strokeStyle = "#65d68a";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+
+    const label = state.areaSelection.selecting
+      ? "SELECT AREA"
+      : `MATERIAL AREA • ${state.areaSelection.wallIds.size} WALL${state.areaSelection.wallIds.size === 1 ? "" : "S"}`;
+
+    ctx.font = "bold 11px system-ui";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    const tw = ctx.measureText(label).width + 12;
+    const ly = Math.max(18, y - 4);
+    ctx.fillStyle = "#11151b";
+    ctx.fillRect(x, ly - 18, tw, 18);
+    ctx.fillStyle = "#8ef0aa";
+    ctx.fillText(label, x + 6, ly - 3);
+    ctx.restore();
   }
 
   function drawTraceOverlay() {
@@ -468,106 +683,6 @@
       $("wallTypeSelect").value = state.activeWallType;
       if (state.activeWallType) applyWallTemplate(state.wallTypes[state.activeWallType]);
     }
-  }
-
-
-  function normalizeAreaName(name) {
-    const value = String(name || "").trim();
-    return value || "General";
-  }
-
-  function collectAreas() {
-    const names = new Set(["General", ...(state.areas || [])]);
-    for (const wall of state.walls.values()) names.add(normalizeAreaName(wall.area));
-    return [...names].sort((a,b) => {
-      if (a === "General") return -1;
-      if (b === "General") return 1;
-      return a.localeCompare(b, undefined, {numeric:true});
-    });
-  }
-
-  function updateAreaBadge() {
-    const area = normalizeAreaName(state.activeArea);
-    $("activeAreaSelect").title = `New walls will be assigned to ${area}`;
-    if ($("fsAreaSelect")) $("fsAreaSelect").title = `New walls will be assigned to ${area}`;
-  }
-
-  function refreshAreaUI() {
-    const areas = collectAreas();
-    state.areas = areas;
-
-    if (!areas.includes(state.activeArea)) state.activeArea = "General";
-
-    const selectedWallArea = state.selectedId && state.walls.has(state.selectedId)
-      ? normalizeAreaName(state.walls.get(state.selectedId).area)
-      : state.activeArea;
-
-    const fillAreaSelect = (select, includeAll = false, labelPrefix = "") => {
-      if (!select) return;
-      const current = select.value;
-      select.innerHTML = includeAll ? '<option value="">All Areas</option>' : "";
-      for (const area of areas) {
-        const opt = document.createElement("option");
-        opt.value = area;
-        opt.textContent = labelPrefix ? `${labelPrefix}${area}` : area;
-        select.appendChild(opt);
-      }
-      if (includeAll) {
-        select.value = areas.includes(current) ? current : "";
-      } else {
-        select.value = areas.includes(current) ? current : state.activeArea;
-      }
-    };
-
-    fillAreaSelect($("activeAreaSelect"), false, "AREA: ");
-    fillAreaSelect($("fsAreaSelect"), false, "AREA: ");
-    fillAreaSelect($("wallAreaSelect"), false, "");
-    fillAreaSelect($("markupsAreaFilter"), true, "");
-    fillAreaSelect($("materialAreaFilter"), true, "");
-
-    $("activeAreaSelect").value = state.activeArea;
-    $("fsAreaSelect").value = state.activeArea;
-    $("wallAreaSelect").value = areas.includes(selectedWallArea) ? selectedWallArea : state.activeArea;
-
-    if (state.materialAreaFilter && !areas.includes(state.materialAreaFilter)) {
-      state.materialAreaFilter = "";
-    }
-    $("materialAreaFilter").value = state.materialAreaFilter;
-    updateAreaBadge();
-  }
-
-  function setActiveArea(name, syncMaterials = true) {
-    const area = normalizeAreaName(name);
-    if (!state.areas.includes(area)) state.areas.push(area);
-    state.activeArea = area;
-    refreshAreaUI();
-
-    if (syncMaterials) {
-      state.materialAreaFilter = area;
-      $("materialAreaFilter").value = area;
-    }
-
-    if (state.selectedId && !state.walls.has(state.selectedId)) {
-      $("wallAreaSelect").value = area;
-    }
-
-    updateTraceUI();
-    refreshTables();
-  }
-
-  function addArea() {
-    const raw = prompt("New area name:", "Area ");
-    if (raw === null) return;
-    const area = normalizeAreaName(raw);
-    if (state.areas.some(x => x.toLowerCase() === area.toLowerCase())) {
-      setActiveArea(state.areas.find(x => x.toLowerCase() === area.toLowerCase()));
-      return;
-    }
-    state.areas.push(area);
-    state.areas = collectAreas();
-    markProjectDirty();
-    setActiveArea(area, true);
-    closeMoreMenu();
   }
 
   function calculateWallFromTemplate(segment, template) {
@@ -1220,7 +1335,6 @@
     if (wall) {
       $("wallNumber").value = wall.wallNumber;
       $("wallTypeSelect").value = wall.wallType || "";
-      $("wallAreaSelect").value = normalizeAreaName(wall.area);
       $("wallHeight").value = String(wall.height);
       $("studSize").value = wall.studSize;
       $("gauge").value = wall.gauge;
@@ -1232,7 +1346,6 @@
     } else {
       $("wallNumber").value = nextWallNumber();
       $("wallTypeSelect").value = state.activeWallType || "";
-      $("wallAreaSelect").value = state.activeArea;
       $("wallHeight").value = "10";
       $("studSize").value = '3-5/8"';
       $("gauge").value = "20ga";
@@ -1421,24 +1534,6 @@
     filter.value = types.includes(current) ? current : "";
   }
 
-
-  function refreshMarkupsAreaFilter(walls) {
-    const filter = $("markupsAreaFilter");
-    if (!filter) return;
-    const current = filter.value;
-    const areas = [...new Set(walls.map(w => normalizeAreaName(w.area)))]
-      .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
-
-    filter.innerHTML = '<option value="">All areas</option>';
-    for (const area of areas) {
-      const opt = document.createElement("option");
-      opt.value = area;
-      opt.textContent = area;
-      filter.appendChild(opt);
-    }
-    filter.value = areas.includes(current) ? current : "";
-  }
-
   function refreshTables() {
     const tbody = $("wallTable").querySelector("tbody");
     tbody.innerHTML = "";
@@ -1451,17 +1546,10 @@
     });
 
     refreshMarkupsFilter(walls);
-    refreshMarkupsAreaFilter(walls);
-    refreshAreaUI();
-
     const filterValue = $("markupsTypeFilter")?.value || "";
-    const areaFilterValue = $("markupsAreaFilter")?.value || "";
-
-    const visibleWalls = walls.filter(w => {
-      const typeMatch = !filterValue || (w.wallType || "Unassigned") === filterValue;
-      const areaMatch = !areaFilterValue || normalizeAreaName(w.area) === areaFilterValue;
-      return typeMatch && areaMatch;
-    });
+    const visibleWalls = filterValue
+      ? walls.filter(w => (w.wallType || "Unassigned") === filterValue)
+      : walls;
 
     const grouped = new Map();
     for (const wall of visibleWalls) {
@@ -1477,7 +1565,7 @@
       groupRow.className = "markup-group-row";
       groupRow.dataset.group = type;
       groupRow.innerHTML = `
-        <td colspan="8">
+        <td colspan="7">
           <button class="markup-group-toggle" type="button" aria-expanded="${collapsed ? "false" : "true"}">
             <span class="markup-group-chevron">${collapsed ? "▶" : "▼"}</span>
             <strong>${escapeHtml(type)}</strong>
@@ -1503,7 +1591,6 @@
         tr.innerHTML = `
           <td><strong>${escapeHtml(w.wallNumber)}</strong></td>
           <td>${escapeHtml(w.wallType || "—")}</td>
-          <td>${escapeHtml(normalizeAreaName(w.area))}</td>
           <td>${escapeHtml(formatFeetInches(w.lengthFt))}</td>
           <td>${escapeHtml(String(w.height))}'</td>
           <td>${escapeHtml(w.studSize)} ${escapeHtml(w.gauge)}</td>
@@ -1533,7 +1620,7 @@
     }
 
     $("wallCountBadge").textContent = `${walls.length} wall${walls.length === 1 ? "" : "s"}`;
-    $("markupsCountBadge").textContent = (filterValue || areaFilterValue)
+    $("markupsCountBadge").textContent = filterValue
       ? `${visibleWalls.length} of ${walls.length}`
       : `${walls.length} item${walls.length === 1 ? "" : "s"}`;
 
@@ -1544,6 +1631,8 @@
 
   function refreshWallTypeTotals(walls) {
     const el = $("wallTypeTotals");
+    walls = getWallsForMaterialSummary(walls);
+
     if (!walls.length) {
       el.className = "summary-list muted";
       el.textContent = "No walls saved yet.";
@@ -1584,31 +1673,20 @@
 
   function refreshMaterialSummary(walls) {
     const el = $("materialSummary");
-    const selectedArea = state.materialAreaFilter || "";
-    const materialWalls = selectedArea
-      ? walls.filter(w => normalizeAreaName(w.area) === selectedArea)
-      : walls;
-
-    $("materialAreaBadge").textContent = selectedArea || "All Areas";
+    walls = getWallsForMaterialSummary(walls);
+    updateAreaSelectionUI();
 
     if (!walls.length) {
       el.className = "summary-list muted";
-      el.textContent = "No walls saved yet.";
+      el.textContent = state.areaSelection.bounds
+        ? "No saved takeoff walls in the selected area."
+        : "No walls saved yet.";
       return;
     }
-
-    if (!materialWalls.length) {
-      el.className = "summary-list muted";
-      el.textContent = selectedArea
-        ? `No materials saved in ${selectedArea}.`
-        : "No materials saved yet.";
-      return;
-    }
-
     el.className = "summary-list";
     const studs = new Map(), tracks = new Map();
 
-    for (const w of materialWalls) {
+    for (const w of walls) {
       const skey = `${w.studSize} ${w.gauge} × ${w.height}'`;
       studs.set(skey, (studs.get(skey) || 0) + w.studQty);
 
@@ -1668,7 +1746,6 @@
       segmentId: s.id,
       wallNumber,
       wallType: $("wallTypeSelect").value || "",
-      area: normalizeAreaName($("wallAreaSelect").value || state.activeArea),
       lengthFt: c.lengthFt,
       height: Number($("wallHeight").value),
       studSize: $("studSize").value,
@@ -1720,12 +1797,12 @@
       return;
     }
     const rows = [[
-      "Wall Number","Wall Type","Area","Length (ft)","Length (ft-in)","Height (ft)","Stud Size","Gauge",
+      "Wall Number","Wall Type","Length (ft)","Length (ft-in)","Height (ft)","Stud Size","Gauge",
       "Spacing (in OC)","Stud Qty","Top Track","Bottom Track","Track LF","Double Ends","Waste %"
     ]];
     for (const w of walls) {
       rows.push([
-        w.wallNumber, w.wallType || "", normalizeAreaName(w.area), w.lengthFt.toFixed(4), formatFeetInches(w.lengthFt), w.height,
+        w.wallNumber, w.wallType || "", w.lengthFt.toFixed(4), formatFeetInches(w.lengthFt), w.height,
         w.studSize, w.gauge, w.spacing, w.studQty, w.topTrack, w.bottomTrack,
         w.trackFt.toFixed(2), w.doubleEnds ? "Yes" : "No", w.wastePercent
       ]);
@@ -1770,9 +1847,6 @@
       walls: [...state.walls.values()].map(w => ({ ...w })),
       wallTypes: structuredClone(state.wallTypes),
       activeWallType: state.activeWallType,
-      areas: [...state.areas],
-      activeArea: state.activeArea,
-      materialAreaFilter: state.materialAreaFilter,
       detectedUnits: state.detectedUnits,
       unitSelect: $("unitSelect").value,
       calibration: {
@@ -1942,13 +2016,6 @@
       state.wallTypes = { ...state.wallTypes, ...(p.wallTypes || {}) };
       persistWallTypes();
       state.activeWallType = p.activeWallType && state.wallTypes[p.activeWallType] ? p.activeWallType : "";
-      state.walls = new Map([...state.walls.entries()].map(([id, w]) => [
-        id, { ...w, area: normalizeAreaName(w.area) }
-      ]));
-      const restoredAreas = Array.isArray(p.areas) ? p.areas.map(normalizeAreaName) : [];
-      state.areas = [...new Set(["General", ...restoredAreas, ...[...state.walls.values()].map(w => normalizeAreaName(w.area))])];
-      state.activeArea = state.areas.includes(p.activeArea) ? p.activeArea : "General";
-      state.materialAreaFilter = state.areas.includes(p.materialAreaFilter) ? p.materialAreaFilter : "";
       state.detectedUnits = p.detectedUnits || null;
       const validUnits = ["auto", "in", "ft", "mm", "cm", "m"];
       $("unitSelect").value = validUnits.includes(p.unitSelect) ? p.unitSelect : "auto";
@@ -1966,10 +2033,18 @@
       state.history = [];
       state.bounds = computeBounds(state.segments);
       state.selectedId = null;
+      state.areaSelection = {
+        active: false,
+        selecting: false,
+        pointerId: null,
+        start: null,
+        current: null,
+        bounds: null,
+        wallIds: new Set()
+      };
       $("emptyState").style.display = state.segments.length ? "none" : "flex";
       $("fileStatus").textContent = `${state.fileName} • ${state.segments.length.toLocaleString()} segments`;
       refreshWallTypeUI();
-      refreshAreaUI();
       setActiveWallType(state.activeWallType);
       refreshTables();
       selectSegment(null, { preserveMode: true });
@@ -2145,6 +2220,16 @@
   $("projectImportFile").addEventListener("change", e => importProjectBackup(e.target.files?.[0]));
   window.addEventListener("keydown", e => {
     if (e.key === "Escape" && !$("projectDialog").classList.contains("hidden")) closeProjectDialog();
+    if (e.key === "Escape" && state.areaSelection.active) {
+      state.areaSelection.active = false;
+      state.areaSelection.selecting = false;
+      state.areaSelection.pointerId = null;
+      state.areaSelection.start = null;
+      state.areaSelection.current = null;
+      updateAreaSelectionUI();
+      draw();
+      return;
+    }
     if (e.key === "Escape" && state.fullscreenPersistent) toggleViewerFullscreen(false);
   });
   window.addEventListener("beforeunload", e => {
@@ -2283,18 +2368,23 @@
     state.trace.lastPoint = null;
     state.bounds = computeBounds(parsed.segments);
     state.walls.clear();
-    state.areas = ["General", "Area A", "Area B", "Area C", "Area D", "Area E", "Area F"];
-    state.activeArea = "General";
-    state.materialAreaFilter = "";
     state.history = [];
     state.selectedId = null;
+    state.areaSelection = {
+      active: false,
+      selecting: false,
+      pointerId: null,
+      start: null,
+      current: null,
+      bounds: null,
+      wallIds: new Set()
+    };
 
     $("emptyState").style.display = parsed.segments.length ? "none" : "flex";
     $("fileStatus").textContent = parsed.segments.length
       ? `${file.name} — ${parsed.segments.length.toLocaleString()} selectable line segments${parsed.detectedUnits ? ` — units detected: ${parsed.detectedUnits}` : ""}`
       : `${file.name} — no LINE/LWPOLYLINE/POLYLINE geometry found`;
 
-    refreshAreaUI();
     refreshTables();
     selectSegment(null);
     updateCalibrationUI();
@@ -2329,6 +2419,11 @@
   $("collapsePanelsBtn")?.addEventListener("click", () => setAllSidePanels(false));
   $("expandPanelsBtn")?.addEventListener("click", () => setAllSidePanels(true));
 
+  $("selectAreaBtn").addEventListener("click", activateAreaSelection);
+  $("clearAreaBtn").addEventListener("click", clearAreaSelection);
+  $("fsAreaBtn").addEventListener("click", activateAreaSelection);
+  $("fsClearAreaBtn").addEventListener("click", clearAreaSelection);
+
   $("findSelectedBtn").addEventListener("click", () => {
     if (state.selectedId && state.walls.has(state.selectedId)) {
       focusWallSegment(state.selectedId);
@@ -2352,32 +2447,6 @@
   $("applyCalibrationBtn").addEventListener("click", applyCalibration);
   $("cancelCalibrationBtn").addEventListener("click", cancelCalibration);
   $("resetCalibrationBtn").addEventListener("click", resetCalibration);
-
-
-  $("activeAreaSelect").addEventListener("change", (e) => {
-    markProjectDirty();
-    setActiveArea(e.target.value, true);
-  });
-
-  $("fsAreaSelect").addEventListener("change", (e) => {
-    markProjectDirty();
-    setActiveArea(e.target.value, true);
-  });
-
-  $("wallAreaSelect").addEventListener("change", (e) => {
-    const area = normalizeAreaName(e.target.value);
-    if (!state.areas.includes(area)) state.areas.push(area);
-  });
-
-  $("addAreaBtn").addEventListener("click", addArea);
-
-  $("markupsAreaFilter").addEventListener("change", refreshTables);
-
-  $("materialAreaFilter").addEventListener("change", (e) => {
-    state.materialAreaFilter = e.target.value || "";
-    markProjectDirty();
-    refreshMaterialSummary([...state.walls.values()]);
-  });
 
   $("activeWallTypeSelect").addEventListener("change", (e) => {
     markProjectDirty();
@@ -2476,6 +2545,21 @@
   }, {passive:false});
 
   canvas.addEventListener("pointerdown", (e) => {
+    if (state.areaSelection.active) {
+      canvas.setPointerCapture(e.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const p = screenToWorld(sx, sy);
+
+      state.areaSelection.selecting = true;
+      state.areaSelection.pointerId = e.pointerId;
+      state.areaSelection.start = p;
+      state.areaSelection.current = p;
+      draw();
+      return;
+    }
+
     canvas.setPointerCapture(e.pointerId);
     state.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
     if (state.pointers.size === 1) {
@@ -2491,6 +2575,15 @@
   });
 
   canvas.addEventListener("pointermove", (e) => {
+    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      state.areaSelection.current = screenToWorld(sx, sy);
+      draw();
+      return;
+    }
+
     if (!state.pointers.has(e.pointerId)) return;
     state.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
 
@@ -2521,6 +2614,15 @@
   });
 
   canvas.addEventListener("pointerup", (e) => {
+    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      state.areaSelection.current = screenToWorld(sx, sy);
+      finishAreaSelection();
+      return;
+    }
+
     const rect = canvas.getBoundingClientRect();
     const hadOne = state.pointers.size === 1;
     state.pointers.delete(e.pointerId);
@@ -2555,6 +2657,16 @@
   });
 
   canvas.addEventListener("pointercancel", (e) => {
+    if (state.areaSelection.selecting && state.areaSelection.pointerId === e.pointerId) {
+      state.areaSelection.selecting = false;
+      state.areaSelection.pointerId = null;
+      state.areaSelection.start = null;
+      state.areaSelection.current = null;
+      updateAreaSelectionUI();
+      draw();
+      return;
+    }
+
     state.pointers.delete(e.pointerId);
     if (!state.pointers.size) {
       state.dragging = false;
@@ -2566,11 +2678,11 @@
   resizeCanvas();
   refreshWallTypeUI();
   initializeCollapsiblePanelScrolling();
-  refreshAreaUI();
   refreshTables();
   updateCalibrationUI();
   updateTraceUI();
   updateSelectedActionButtons();
+  updateAreaSelectionUI();
   updateCurrentTypeBadge();
   updateProjectTitle();
   syncFullscreenTools();

@@ -21,16 +21,12 @@
       <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">LOCK</button>
       <button id="orthoLockBtn" class="button ortho-lock-button" type="button" aria-pressed="false">ORTHO</button>
       <span id="currentTypeBadge" class="current-type-badge compact-type-badge" role="status" aria-live="polite" title="Current wall type for new traced walls">TYPE: Unassigned</span>
-      <select id="activeAreaSelect" class="compact-area-select" title="Area assigned to new walls">
-        <option value="General">AREA: General</option>
-      </select>
 
       <details id="moreMenu" class="more-menu">
         <summary class="button more-summary">OPTIONS ▾</summary>
         <div class="more-menu-panel">
           <button id="saveProjectBtn" class="button" type="button">Save Project</button>
           <button id="openProjectBtn" class="button" type="button">Open Saved</button>
-          <button id="addAreaBtn" class="button" type="button">+ Add Area</button>
           <button id="fitBtn" class="button" type="button">Fit Drawing</button>
           <button id="scale1Btn" class="button scale-point-button" type="button">Scale 1</button>
           <button id="scale2Btn" class="button scale-point-button" type="button">Scale 2</button>
@@ -69,6 +65,8 @@
             </label>
             <button id="findSelectedBtn" class="mini-tool-button" type="button" disabled>FIND</button>
             <button id="deleteSelectedBtn" class="mini-tool-button delete-mini" type="button" disabled>DELETE</button>
+            <button id="selectAreaBtn" class="mini-tool-button" type="button">SELECT AREA</button>
+            <button id="clearAreaBtn" class="mini-tool-button" type="button" disabled>CLEAR AREA</button>
             <button id="fullscreenBtn" class="mini-tool-button fullscreen-main" type="button" aria-pressed="false">⛶ FULL SCREEN</button>
             <div class="viewer-option-status">
               <span id="scaleBadge" class="badge">Scale: DXF units</span>
@@ -83,11 +81,10 @@
         <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
         <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
         <button id="fsOrthoBtn" class="button" type="button">ORTHO</button>
+        <button id="fsAreaBtn" class="button" type="button">AREA</button>
+        <button id="fsClearAreaBtn" class="button" type="button" disabled>CLEAR AREA</button>
         <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
-        <select id="fsAreaSelect" class="fullscreen-area-select" title="Area assigned to new traced walls">
-          <option value="General">AREA: General</option>
-        </select>
         <button id="fsFitBtn" class="button" type="button">Fit</button>
         <button id="fsExitBtn" class="button" type="button">Exit Full Screen</button>
       </div>
@@ -160,12 +157,6 @@
           <label>Wall Type
             <select id="wallTypeSelect">
               <option value="">Unassigned</option>
-            </select>
-          </label>
-
-          <label>Area
-            <select id="wallAreaSelect">
-              <option value="General">General</option>
             </select>
           </label>
 
@@ -298,11 +289,6 @@
               <option value="">All types</option>
             </select>
           </label>
-          <label>Show area
-            <select id="markupsAreaFilter">
-              <option value="">All areas</option>
-            </select>
-          </label>
           <button id="collapseMarkupGroupsBtn" class="button" type="button">Hide Groups</button>
           <button id="expandMarkupGroupsBtn" class="button" type="button">Show Groups</button>
           <button id="undoLastBtn" class="button" type="button" disabled>Undo Last</button>
@@ -315,7 +301,6 @@
               <tr>
                 <th>Wall</th>
                 <th>Type</th>
-                <th>Area</th>
                 <th>Length</th>
                 <th>Ht.</th>
                 <th>Stud</th>
@@ -340,13 +325,8 @@
       <details class="panel collapsible-panel">
   <summary class="collapsible-summary"><span>Material Summary</span><span class="collapse-chevron">▾</span></summary>
   <div class="collapsible-body panel-scroll-body">
-<div class="material-area-toolbar">
-      <label>Materials for
-        <select id="materialAreaFilter">
-          <option value="">All Areas</option>
-        </select>
-      </label>
-      <span id="materialAreaBadge" class="badge">All Areas</span>
+<div class="area-material-status">
+      <span id="areaSelectionBadge" class="badge">All saved walls</span>
     </div>
     <div id="materialSummary" class="summary-list muted">No walls saved yet.</div>
   </div>
