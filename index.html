@@ -55,6 +55,12 @@
     <section class="viewer-card">
       <div class="viewer-toolbar compact-viewer-toolbar">
         <div id="fileStatus">No DXF loaded</div>
+
+        <div class="viewer-area-material-actions">
+          <button id="selectAreaBtn" class="mini-tool-button area-material-button" type="button">AREA MATERIALS</button>
+          <button id="clearAreaBtn" class="mini-tool-button area-clear-button" type="button" disabled>CLEAR</button>
+        </div>
+
         <details id="viewerOptionsMenu" class="viewer-options-menu">
           <summary class="mini-tool-button viewer-options-summary">VIEW ▾</summary>
           <div class="viewer-options-panel">
@@ -65,8 +71,6 @@
             </label>
             <button id="findSelectedBtn" class="mini-tool-button" type="button" disabled>FIND</button>
             <button id="deleteSelectedBtn" class="mini-tool-button delete-mini" type="button" disabled>DELETE</button>
-            <button id="selectAreaBtn" class="mini-tool-button" type="button">SELECT AREA</button>
-            <button id="clearAreaBtn" class="mini-tool-button" type="button" disabled>CLEAR AREA</button>
             <button id="fullscreenBtn" class="mini-tool-button fullscreen-main" type="button" aria-pressed="false">⛶ FULL SCREEN</button>
             <div class="viewer-option-status">
               <span id="scaleBadge" class="badge">Scale: DXF units</span>
@@ -81,8 +85,8 @@
         <button id="fsTraceBtn" class="button" type="button">TRACE WALLS</button>
         <button id="fsLockBtn" class="button" type="button">TRACE LOCK</button>
         <button id="fsOrthoBtn" class="button" type="button">ORTHO</button>
-        <button id="fsAreaBtn" class="button" type="button">AREA</button>
-        <button id="fsClearAreaBtn" class="button" type="button" disabled>CLEAR AREA</button>
+        <button id="fsAreaBtn" class="button area-material-button" type="button">AREA MATERIALS</button>
+        <button id="fsClearAreaBtn" class="button area-clear-button" type="button" disabled>CLEAR</button>
         <span id="fsTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <span id="fsCurrentTypeBadge" class="current-type-badge" role="status">TYPE: Unassigned</span>
         <button id="fsFitBtn" class="button" type="button">Fit</button>

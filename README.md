@@ -443,3 +443,18 @@ The selection box is stored in drawing/world coordinates, so it stays aligned wi
 This is intentionally not Area A / Area B / named-area assignment. It behaves like a SketchUp-style window selection for temporary material totals.
 
 The Version 2.9 TRACE LOCK behavior remains unchanged.
+
+
+## Version 2.13 — AREA MATERIALS button made permanently visible
+
+The area-material selection feature from Version 2.12 was working, but the control was hidden inside the VIEW dropdown.
+
+Version 2.13 moves it directly onto the viewer toolbar:
+
+- **AREA MATERIALS** — always visible beside the drawing.
+- **CLEAR** — clears the selected material window and returns totals to the complete takeoff.
+- Full-screen mode also uses the explicit **AREA MATERIALS** label.
+
+Tap AREA MATERIALS, then drag a box around the portion of the plan you want to total. Material Summary and Wall Type Totals immediately recalculate for the walls touched by that box.
+
+No named Area A / B / C system is used.

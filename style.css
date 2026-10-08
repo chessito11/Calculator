@@ -1290,3 +1290,54 @@ body.viewer-focus-active {
     font-size: 8.5px !important;
   }
 }
+
+
+/* V2.13 — make AREA MATERIALS impossible to miss */
+.viewer-area-material-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.area-material-button {
+  border-color: rgba(101,214,138,.65) !important;
+  color: #aaf0bd !important;
+  font-weight: 900 !important;
+}
+
+.area-material-button.active-tool {
+  background: rgba(101,214,138,.12) !important;
+  box-shadow: inset 0 0 0 1px rgba(101,214,138,.45);
+}
+
+.area-clear-button:disabled {
+  opacity: .35;
+}
+
+.compact-viewer-toolbar .area-material-button,
+.compact-viewer-toolbar .area-clear-button {
+  min-height: 20px !important;
+  padding: 2px 6px !important;
+  font-size: 8.5px !important;
+}
+
+@media (max-width: 700px) {
+  .compact-viewer-toolbar {
+    gap: 3px !important;
+  }
+
+  .viewer-area-material-actions {
+    gap: 2px;
+  }
+
+  .compact-viewer-toolbar .area-material-button {
+    padding: 2px 5px !important;
+    font-size: 8px !important;
+  }
+
+  .compact-viewer-toolbar .area-clear-button {
+    padding: 2px 4px !important;
+    font-size: 8px !important;
+  }
+}

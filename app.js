@@ -279,11 +279,11 @@
     const count = state.areaSelection.wallIds.size;
 
     $("selectAreaBtn").classList.toggle("active-tool", active);
-    $("selectAreaBtn").textContent = active ? "DRAW AREA…" : "SELECT AREA";
+    $("selectAreaBtn").textContent = active ? "DRAW BOX…" : "AREA MATERIALS";
     $("clearAreaBtn").disabled = !hasSelection;
 
     $("fsAreaBtn").classList.toggle("active-tool", active);
-    $("fsAreaBtn").textContent = active ? "DRAW AREA…" : "AREA";
+    $("fsAreaBtn").textContent = active ? "DRAW BOX…" : "AREA MATERIALS";
     $("fsClearAreaBtn").disabled = !hasSelection;
 
     const badge = $("areaSelectionBadge");
