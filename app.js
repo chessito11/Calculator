@@ -33,6 +33,7 @@
     fullscreenFallback: false,
     fullscreenPersistent: false,
     segments: [],
+    labels: [],
     selectedId: null,
     walls: new Map(),
     detectedUnits: null,
@@ -57,7 +58,15 @@
     dragStart: null,
     pointers: new Map(),
     pinchStartDistance: null,
-    pinchStartScale: null
+    pinchStartScale: null,
+    pdfImport: {
+      fileName: "",
+      bytes: null,
+      doc: null,
+      pageCount: 0,
+      conversion: null,
+      library: null
+    }
   };
 
   const INSUNITS = {
@@ -91,6 +100,7 @@
   function parseDXF(text) {
     const pairs = pairDXF(text);
     const segments = [];
+    const labels = [];
     const detectedUnits = detectInsUnits(pairs);
 
     let inEntities = false;
@@ -163,6 +173,32 @@
         i = j - 1;
       }
 
+
+      else if (p.value === "TEXT" || p.value === "MTEXT") {
+        let x, y, height = 0.15, rotation = 0;
+        const parts = [];
+        let j = i + 1;
+        for (; j < pairs.length && pairs[j].code !== 0; j++) {
+          const q = pairs[j];
+          if (q.code === 10) x = Number(q.value);
+          else if (q.code === 20) y = Number(q.value);
+          else if (q.code === 40) height = Number(q.value);
+          else if (q.code === 50) rotation = Number(q.value);
+          else if (q.code === 1 || q.code === 3) parts.push(q.value);
+        }
+        const text = parts.join("").replace(/\\P/g, "\n").trim();
+        if (Number.isFinite(x) && Number.isFinite(y) && text) {
+          labels.push({
+            x, y,
+            height: Number.isFinite(height) && height > 0 ? height : 0.15,
+            rotation: Number.isFinite(rotation) ? rotation : 0,
+            text,
+            sourceType: p.value
+          });
+        }
+        i = j - 1;
+      }
+
       else if (p.value === "POLYLINE") {
         let flags = 0;
         let j = i + 1;
@@ -197,7 +233,7 @@
       }
     }
 
-    return { segments, detectedUnits };
+    return { segments, labels, detectedUnits };
   }
 
   function computeBounds(segments) {
@@ -464,9 +500,50 @@
       }
     }
 
+    drawPdfLabels();
     drawTemporaryAreaOverlay();
     drawCalibrationOverlay();
     drawTraceOverlay();
+  }
+
+
+  function drawPdfLabels() {
+    if (!state.labels?.length) return;
+
+    ctx.save();
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#aeb8c5";
+
+    // Avoid turning a dense PDF note sheet into a solid block of text.
+    const maxLabels = 3500;
+    const step = state.labels.length > maxLabels
+      ? Math.ceil(state.labels.length / maxLabels)
+      : 1;
+
+    for (let i = 0; i < state.labels.length; i += step) {
+      const label = state.labels[i];
+      if (!label?.text) continue;
+
+      const p = worldToScreen(label.x, label.y);
+      const rawPx = Math.abs((Number(label.height) || 0.08) * state.view.scale);
+      const fontPx = Math.max(7, Math.min(18, rawPx || 9));
+
+      // Skip labels that are extremely tiny at the current zoom.
+      if (fontPx <= 7 && state.view.scale < 25) continue;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(-(Number(label.rotation) || 0) * Math.PI / 180);
+      ctx.font = `${fontPx}px system-ui`;
+      ctx.textAlign = "left";
+
+      const lines = String(label.text).split(/\r?\n/).slice(0, 4);
+      lines.forEach((line, lineIndex) => {
+        ctx.fillText(line, 0, lineIndex * fontPx * 1.08);
+      });
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   function drawTemporaryAreaOverlay() {
@@ -1795,6 +1872,571 @@
     return `"${s.replace(/"/g, '""')}"`;
   }
 
+
+  const PDFJS_MODULE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.mjs";
+  const PDFJS_WORKER_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.worker.mjs";
+  const PDF_POINTS_PER_FOOT = 72 * 12;
+
+  function setPrintStatus(message, error = false) {
+    const el = $("printConvertStatus");
+    el.textContent = message;
+    el.classList.toggle("error", !!error);
+  }
+
+  async function loadPdfJsLibrary() {
+    if (state.pdfImport.library) return state.pdfImport.library;
+    setPrintStatus("Loading PDF converter…");
+    try {
+      const pdfjsLib = await import(PDFJS_MODULE_URL);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+      state.pdfImport.library = pdfjsLib;
+      return pdfjsLib;
+    } catch (err) {
+      throw new Error("Could not load the PDF converter. Internet access is required the first time PRINT is used.");
+    }
+  }
+
+  function openPrintConverterDialog() {
+    $("printConverterDialog").classList.remove("hidden");
+    setPrintStatus(
+      state.pdfImport.fileName
+        ? `${state.pdfImport.fileName} ready. Choose a page to preview or convert.`
+        : "Choose a PDF print."
+    );
+  }
+
+  function closePrintConverterDialog() {
+    $("printConverterDialog").classList.add("hidden");
+  }
+
+  function resetPdfImportUi() {
+    state.pdfImport.fileName = "";
+    state.pdfImport.bytes = null;
+    state.pdfImport.doc = null;
+    state.pdfImport.pageCount = 0;
+    state.pdfImport.conversion = null;
+    $("printFileName").textContent = "No PDF selected";
+    $("printPageNumber").value = "1";
+    $("printPageNumber").max = "1";
+    $("printPageCount").textContent = "— pages";
+    $("previewPrintPageBtn").disabled = true;
+    $("convertLoadPrintBtn").disabled = true;
+    $("downloadConvertedDxfBtn").disabled = true;
+    const preview = $("printPreviewCanvas");
+    preview.width = 1;
+    preview.height = 1;
+    $("printPreviewEmpty").style.display = "flex";
+  }
+
+  async function loadPdfPrintFile(file) {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+      alert("Please choose a PDF print.");
+      return;
+    }
+
+    try {
+      const pdfjsLib = await loadPdfJsLibrary();
+      setPrintStatus("Opening PDF…");
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const task = pdfjsLib.getDocument({
+        data: bytes,
+        stopAtErrors: false
+      });
+      const doc = await task.promise;
+
+      state.pdfImport.fileName = file.name;
+      state.pdfImport.bytes = bytes;
+      state.pdfImport.doc = doc;
+      state.pdfImport.pageCount = doc.numPages;
+      state.pdfImport.conversion = null;
+
+      $("printFileName").textContent = file.name;
+      $("printPageNumber").min = "1";
+      $("printPageNumber").max = String(doc.numPages);
+      $("printPageNumber").value = "1";
+      $("printPageCount").textContent = `${doc.numPages} page${doc.numPages === 1 ? "" : "s"}`;
+      $("previewPrintPageBtn").disabled = false;
+      $("convertLoadPrintBtn").disabled = false;
+      $("downloadConvertedDxfBtn").disabled = true;
+
+      setPrintStatus(`PDF loaded • ${doc.numPages} page${doc.numPages === 1 ? "" : "s"}.`);
+      await previewPdfPage();
+    } catch (err) {
+      console.error(err);
+      setPrintStatus(`Could not open PDF: ${err.message || err}`, true);
+    }
+  }
+
+  function selectedPdfPageNumber() {
+    const max = Math.max(1, state.pdfImport.pageCount || 1);
+    const raw = Math.round(Number($("printPageNumber").value) || 1);
+    const pageNumber = Math.min(max, Math.max(1, raw));
+    $("printPageNumber").value = String(pageNumber);
+    return pageNumber;
+  }
+
+  async function previewPdfPage() {
+    if (!state.pdfImport.doc) return;
+    try {
+      const pageNumber = selectedPdfPageNumber();
+      setPrintStatus(`Rendering page ${pageNumber} preview…`);
+      const page = await state.pdfImport.doc.getPage(pageNumber);
+      const base = page.getViewport({ scale: 1 });
+      const maxWidth = Math.min(900, Math.max(320, window.innerWidth - 90));
+      const scale = Math.max(0.25, Math.min(1.35, maxWidth / Math.max(1, base.width)));
+      const viewport = page.getViewport({ scale });
+
+      const canvas = $("printPreviewCanvas");
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(viewport.width * ratio);
+      canvas.height = Math.round(viewport.height * ratio);
+      canvas.style.width = `${Math.round(viewport.width)}px`;
+      canvas.style.height = `${Math.round(viewport.height)}px`;
+
+      const context = canvas.getContext("2d", { alpha: false });
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, viewport.width, viewport.height);
+
+      await page.render({
+        canvasContext: context,
+        viewport
+      }).promise;
+
+      $("printPreviewEmpty").style.display = "none";
+      state.pdfImport.conversion = null;
+      $("downloadConvertedDxfBtn").disabled = true;
+      setPrintStatus(`Page ${pageNumber} preview ready.`);
+    } catch (err) {
+      console.error(err);
+      setPrintStatus(`Preview error: ${err.message || err}`, true);
+    }
+  }
+
+  function matrixMultiply(a, b) {
+    return [
+      a[0] * b[0] + a[2] * b[1],
+      a[1] * b[0] + a[3] * b[1],
+      a[0] * b[2] + a[2] * b[3],
+      a[1] * b[2] + a[3] * b[3],
+      a[0] * b[4] + a[2] * b[5] + a[4],
+      a[1] * b[4] + a[3] * b[5] + a[5]
+    ];
+  }
+
+  function matrixPoint(m, x, y) {
+    return {
+      x: m[0] * x + m[2] * y + m[4],
+      y: m[1] * x + m[3] * y + m[5]
+    };
+  }
+
+  function flattenNumeric(value, out = []) {
+    if (value == null) return out;
+    if (typeof value === "number") {
+      out.push(value);
+    } else if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+      for (const item of value) flattenNumeric(item, out);
+    }
+    return out;
+  }
+
+  function approximateCubic(p0, p1, p2, p3, steps = 8) {
+    const pts = [];
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const mt = 1 - t;
+      pts.push({
+        x: mt**3*p0.x + 3*mt**2*t*p1.x + 3*mt*t**2*p2.x + t**3*p3.x,
+        y: mt**3*p0.y + 3*mt**2*t*p1.y + 3*mt*t**2*p2.y + t**3*p3.y
+      });
+    }
+    return pts;
+  }
+
+  function approximateQuadratic(p0, p1, p2, steps = 7) {
+    const pts = [];
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const mt = 1 - t;
+      pts.push({
+        x: mt**2*p0.x + 2*mt*t*p1.x + t**2*p2.x,
+        y: mt**2*p0.y + 2*mt*t*p1.y + t**2*p2.y
+      });
+    }
+    return pts;
+  }
+
+  async function extractPdfConversion() {
+    if (!state.pdfImport.doc) throw new Error("Choose a PDF print first.");
+
+    const pageNumber = selectedPdfPageNumber();
+    const page = await state.pdfImport.doc.getPage(pageNumber);
+    const pdfjsLib = state.pdfImport.library || await loadPdfJsLibrary();
+    const OPS = pdfjsLib.OPS;
+
+    setPrintStatus(`Converting page ${pageNumber} vector linework…`);
+
+    const opList = await page.getOperatorList();
+    const rawSegments = [];
+    const ctmStack = [];
+    let ctm = [1, 0, 0, 1, 0, 0];
+
+    const minLengthFt = $("skipTinyPrintLines").checked ? (1 / 8 / 12) : 0.00001;
+
+    function addPdfSegment(p1, p2) {
+      const a = matrixPoint(ctm, p1.x, p1.y);
+      const b = matrixPoint(ctm, p2.x, p2.y);
+      const x1 = a.x / PDF_POINTS_PER_FOOT;
+      const y1 = a.y / PDF_POINTS_PER_FOOT;
+      const x2 = b.x / PDF_POINTS_PER_FOOT;
+      const y2 = b.y / PDF_POINTS_PER_FOOT;
+      if (![x1,y1,x2,y2].every(Number.isFinite)) return;
+      if (Math.hypot(x2-x1, y2-y1) < minLengthFt) return;
+      rawSegments.push({ x1, y1, x2, y2, sourceType: "PDF_VECTOR" });
+    }
+
+    function decodePackedDrawPath(pathData) {
+      const data = flattenNumeric(pathData);
+      if (!data.length) return;
+
+      let i = 0;
+      let current = null;
+      let start = null;
+
+      while (i < data.length) {
+        const cmd = data[i++];
+
+        if (cmd === 0) { // DrawOPS.moveTo
+          if (i + 1 >= data.length) break;
+          current = { x: data[i++], y: data[i++] };
+          start = { ...current };
+        } else if (cmd === 1) { // DrawOPS.lineTo
+          if (!current || i + 1 >= data.length) break;
+          const next = { x: data[i++], y: data[i++] };
+          addPdfSegment(current, next);
+          current = next;
+        } else if (cmd === 2) { // DrawOPS.curveTo
+          if (!current || i + 5 >= data.length) break;
+          const c1 = { x: data[i++], y: data[i++] };
+          const c2 = { x: data[i++], y: data[i++] };
+          const end = { x: data[i++], y: data[i++] };
+          let prev = current;
+          for (const next of approximateCubic(current, c1, c2, end)) {
+            addPdfSegment(prev, next);
+            prev = next;
+          }
+          current = end;
+        } else if (cmd === 3) { // DrawOPS.quadraticCurveTo
+          if (!current || i + 3 >= data.length) break;
+          const c = { x: data[i++], y: data[i++] };
+          const end = { x: data[i++], y: data[i++] };
+          let prev = current;
+          for (const next of approximateQuadratic(current, c, end)) {
+            addPdfSegment(prev, next);
+            prev = next;
+          }
+          current = end;
+        } else if (cmd === 4) { // DrawOPS.closePath
+          if (current && start) addPdfSegment(current, start);
+          current = start ? { ...start } : current;
+        } else {
+          // Unknown packed operation. Stop this path rather than creating bad geometry.
+          break;
+        }
+      }
+    }
+
+    function decodeLegacyConstructPath(args) {
+      const ops = Array.from(args?.[0] || []);
+      const coords = flattenNumeric(args?.[1]);
+      let ci = 0;
+      let current = null;
+      let start = null;
+
+      for (const op of ops) {
+        if (op === OPS.moveTo) {
+          current = { x: coords[ci++], y: coords[ci++] };
+          start = { ...current };
+        } else if (op === OPS.lineTo) {
+          const next = { x: coords[ci++], y: coords[ci++] };
+          if (current) addPdfSegment(current, next);
+          current = next;
+        } else if (op === OPS.rectangle) {
+          const x = coords[ci++], y = coords[ci++], w = coords[ci++], h = coords[ci++];
+          const p1={x,y}, p2={x:x+w,y}, p3={x:x+w,y:y+h}, p4={x,y:y+h};
+          addPdfSegment(p1,p2); addPdfSegment(p2,p3); addPdfSegment(p3,p4); addPdfSegment(p4,p1);
+          current = p1; start = p1;
+        } else if (op === OPS.curveTo) {
+          const c1={x:coords[ci++],y:coords[ci++]}, c2={x:coords[ci++],y:coords[ci++]}, end={x:coords[ci++],y:coords[ci++]};
+          if (current) {
+            let prev=current;
+            for (const next of approximateCubic(current,c1,c2,end)) { addPdfSegment(prev,next); prev=next; }
+          }
+          current=end;
+        } else if (op === OPS.closePath) {
+          if (current && start) addPdfSegment(current,start);
+          current=start;
+        } else {
+          // Consume old curveTo2 / curveTo3 approximately if they appear.
+          if (op === OPS.curveTo2) {
+            const c2={x:coords[ci++],y:coords[ci++]}, end={x:coords[ci++],y:coords[ci++]};
+            if (current) {
+              let prev=current;
+              for (const next of approximateCubic(current,current,c2,end)) { addPdfSegment(prev,next); prev=next; }
+            }
+            current=end;
+          } else if (op === OPS.curveTo3) {
+            const c1={x:coords[ci++],y:coords[ci++]}, end={x:coords[ci++],y:coords[ci++]};
+            if (current) {
+              let prev=current;
+              for (const next of approximateCubic(current,c1,end,end)) { addPdfSegment(prev,next); prev=next; }
+            }
+            current=end;
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i] || [];
+
+      if (fn === OPS.save) {
+        ctmStack.push([...ctm]);
+      } else if (fn === OPS.restore) {
+        ctm = ctmStack.pop() || [1,0,0,1,0,0];
+      } else if (fn === OPS.transform) {
+        const m = flattenNumeric(args).slice(0,6);
+        if (m.length === 6 && m.every(Number.isFinite)) ctm = matrixMultiply(ctm, m);
+      } else if (fn === OPS.constructPath) {
+        // PDF.js <=4: [ops, coords, minMax]
+        // PDF.js 5/6: [paintOp, [packed DrawOPS path], minMax]
+        const first = args?.[0];
+        if (Array.isArray(first) || ArrayBuffer.isView(first)) {
+          decodeLegacyConstructPath(args);
+        } else {
+          const packed = args?.[1]?.[0] ?? args?.[1];
+          decodePackedDrawPath(packed);
+        }
+      }
+    }
+
+    // Deduplicate linework; architectural PDFs often repeat the same stroke.
+    const unique = new Map();
+    const keyPoint = (x,y) => `${x.toFixed(5)},${y.toFixed(5)}`;
+    for (const s of rawSegments) {
+      const a = keyPoint(s.x1,s.y1);
+      const b = keyPoint(s.x2,s.y2);
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      if (!unique.has(key)) unique.set(key, s);
+    }
+
+    const segments = [...unique.values()].map((s, idx) => ({ ...s, id: idx + 1 }));
+
+    const labels = [];
+    if ($("includePrintText").checked) {
+      setPrintStatus(`Extracting page ${pageNumber} legends and text…`);
+      try {
+        const textContent = await page.getTextContent();
+        for (const item of textContent.items || []) {
+          const text = String(item.str || "").trim();
+          if (!text || !item.transform || item.transform.length < 6) continue;
+
+          const t = item.transform;
+          const x = Number(t[4]) / PDF_POINTS_PER_FOOT;
+          const y = Number(t[5]) / PDF_POINTS_PER_FOOT;
+          const heightPt = Math.max(
+            Math.hypot(Number(t[2]) || 0, Number(t[3]) || 0),
+            Math.hypot(Number(t[0]) || 0, Number(t[1]) || 0) * 0.7,
+            4
+          );
+
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+          labels.push({
+            x, y,
+            height: heightPt / PDF_POINTS_PER_FOOT,
+            rotation: Math.atan2(Number(t[1]) || 0, Number(t[0]) || 1) * 180 / Math.PI,
+            text,
+            sourceType: "PDF_TEXT"
+          });
+        }
+      } catch (err) {
+        console.warn("PDF text extraction failed:", err);
+      }
+    }
+
+    const conversion = {
+      pageNumber,
+      segments,
+      labels,
+      sourceFileName: state.pdfImport.fileName
+    };
+    state.pdfImport.conversion = conversion;
+    $("downloadConvertedDxfBtn").disabled = !segments.length;
+
+    if (!segments.length) {
+      setPrintStatus(
+        labels.length
+          ? `Page ${pageNumber}: text found, but no usable vector linework. This may be a scanned/raster sheet.`
+          : `Page ${pageNumber}: no usable vector linework found. This may be a scanned/raster sheet.`,
+        true
+      );
+    } else {
+      setPrintStatus(
+        `Converted page ${pageNumber} • ${segments.length.toLocaleString()} line segments • ${labels.length.toLocaleString()} text/legend labels.`
+      );
+    }
+    return conversion;
+  }
+
+  function dxfNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Number(n.toFixed(7)).toString() : "0";
+  }
+
+  function dxfText(value) {
+    return String(value ?? "")
+      .replace(/\r?\n/g, " ")
+      .replace(/[^\x20-\x7E]/g, "?")
+      .slice(0, 240);
+  }
+
+  function buildConvertedDxf(conversion) {
+    const lines = [];
+    const push = (...values) => lines.push(...values.map(String));
+
+    push("0","SECTION","2","HEADER",
+         "9","$ACADVER","1","AC1009",
+         "9","$INSUNITS","70","2",
+         "0","ENDSEC");
+
+    push("0","SECTION","2","TABLES",
+         "0","TABLE","2","LAYER","70","2",
+         "0","LAYER","2","PDF_GEOMETRY","70","0","62","7","6","CONTINUOUS",
+         "0","LAYER","2","PDF_TEXT","70","0","62","3","6","CONTINUOUS",
+         "0","ENDTAB",
+         "0","ENDSEC");
+
+    push("0","SECTION","2","ENTITIES");
+
+    for (const s of conversion.segments) {
+      push("0","LINE","8","PDF_GEOMETRY",
+           "10",dxfNumber(s.x1),"20",dxfNumber(s.y1),"30","0",
+           "11",dxfNumber(s.x2),"21",dxfNumber(s.y2),"31","0");
+    }
+
+    for (const label of conversion.labels || []) {
+      const height = Math.max(Number(label.height) || 0.08, 0.04);
+      push("0","TEXT","8","PDF_TEXT",
+           "10",dxfNumber(label.x),"20",dxfNumber(label.y),"30","0",
+           "40",dxfNumber(height),
+           "1",dxfText(label.text),
+           "50",dxfNumber(label.rotation || 0),
+           "7","STANDARD");
+    }
+
+    push("0","ENDSEC","0","EOF");
+    return lines.join("\r\n") + "\r\n";
+  }
+
+  function convertedDxfFileName(conversion) {
+    const base = (conversion?.sourceFileName || state.pdfImport.fileName || "print")
+      .replace(/\.pdf$/i, "")
+      .replace(/[^a-z0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "print";
+    return `${base}-P${conversion?.pageNumber || selectedPdfPageNumber()}-ATLAS.dxf`;
+  }
+
+  function downloadTextFile(text, fileName, type = "application/dxf") {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  async function ensurePdfConversion() {
+    const requestedPage = selectedPdfPageNumber();
+    if (!state.pdfImport.conversion || state.pdfImport.conversion.pageNumber !== requestedPage) {
+      return await extractPdfConversion();
+    }
+    return state.pdfImport.conversion;
+  }
+
+  async function downloadConvertedDxf() {
+    try {
+      const conversion = await ensurePdfConversion();
+      if (!conversion.segments.length) return;
+      const dxf = buildConvertedDxf(conversion);
+      downloadTextFile(dxf, convertedDxfFileName(conversion));
+      setPrintStatus(`DXF downloaded • ${conversion.segments.length.toLocaleString()} segments • ${conversion.labels.length.toLocaleString()} labels.`);
+    } catch (err) {
+      console.error(err);
+      setPrintStatus(`DXF export failed: ${err.message || err}`, true);
+    }
+  }
+
+  async function convertPdfAndLoadIntoTakeoff() {
+    try {
+      if (!confirmDiscardUnsaved()) return;
+      const conversion = await ensurePdfConversion();
+      if (!conversion.segments.length) {
+        alert("This PDF page does not contain usable vector linework. It may be a scanned/image-only print.");
+        return;
+      }
+
+      if (state.projectDirty && state.segments.length &&
+          !confirm("Load this converted PDF page? Unsaved takeoff changes will be lost.")) return;
+
+      const fileName = convertedDxfFileName(conversion);
+      state.fileName = fileName;
+      state.projectName = fileName.replace(/\.dxf$/i, "");
+      state.savedProjectId = null;
+      state.projectDirty = true;
+      state.segments = conversion.segments.map(s => ({ ...s }));
+      state.labels = (conversion.labels || []).map(l => ({ ...l }));
+      state.detectedUnits = "ft";
+      $("unitSelect").value = "ft";
+      state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
+      state.toolMode = "wall";
+      state.trace.lastPoint = null;
+      state.bounds = computeBounds(state.segments);
+      state.walls.clear();
+      state.history = [];
+      state.selectedId = null;
+      state.tempArea = {
+        selecting: false,
+        closed: false,
+        points: [],
+        wallIds: new Set()
+      };
+
+      $("emptyState").style.display = "none";
+      $("fileStatus").textContent =
+        `${state.pdfImport.fileName} P${conversion.pageNumber} → ${state.segments.length.toLocaleString()} vector segments • ${state.labels.length.toLocaleString()} labels`;
+
+      updateProjectTitle();
+      refreshTables();
+      selectSegment(null);
+      updateCalibrationUI();
+      updateToolUI();
+      updateTraceUI();
+      fitDrawing();
+      closePrintConverterDialog();
+    } catch (err) {
+      console.error(err);
+      setPrintStatus(`Conversion failed: ${err.message || err}`, true);
+    }
+  }
+
   function exportCSV() {
     const walls = [...state.walls.values()].sort((a,b) => a.wallNumber.localeCompare(b.wallNumber, undefined, {numeric:true}));
     if (!walls.length) {
@@ -1849,6 +2491,7 @@
       fileName: state.fileName,
       savedAt: new Date().toISOString(),
       segments: state.segments.map(s => ({ ...s })),
+      labels: state.labels.map(l => ({ ...l })),
       walls: [...state.walls.values()].map(w => ({ ...w })),
       wallTypes: structuredClone(state.wallTypes),
       activeWallType: state.activeWallType,
@@ -2017,6 +2660,7 @@
       state.savedProjectId = id;
       state.projectDirty = false;
       state.segments = p.segments.map(s => ({ ...s }));
+      state.labels = Array.isArray(p.labels) ? p.labels.map(l => ({ ...l })) : [];
       state.walls = new Map(p.walls.map(w => [w.segmentId, { ...w }]));
       state.wallTypes = { ...state.wallTypes, ...(p.wallTypes || {}) };
       persistWallTypes();
@@ -2331,6 +2975,46 @@
     }
   });
 
+  $("openPrintBtn").addEventListener("click", () => {
+    openPrintConverterDialog();
+  });
+
+  $("choosePrintPdfBtn").addEventListener("click", () => {
+    const input = $("pdfPrintFile");
+    input.value = "";
+    input.click();
+  });
+
+  $("pdfPrintFile").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await loadPdfPrintFile(file);
+  });
+
+  $("previewPrintPageBtn").addEventListener("click", previewPdfPage);
+  $("printPageNumber").addEventListener("change", () => {
+    state.pdfImport.conversion = null;
+    $("downloadConvertedDxfBtn").disabled = true;
+  });
+
+  $("includePrintText").addEventListener("change", () => {
+    state.pdfImport.conversion = null;
+    $("downloadConvertedDxfBtn").disabled = true;
+  });
+
+  $("skipTinyPrintLines").addEventListener("change", () => {
+    state.pdfImport.conversion = null;
+    $("downloadConvertedDxfBtn").disabled = true;
+  });
+
+  $("convertLoadPrintBtn").addEventListener("click", convertPdfAndLoadIntoTakeoff);
+  $("downloadConvertedDxfBtn").addEventListener("click", downloadConvertedDxf);
+
+  $("closePrintConverterBtn").addEventListener("click", closePrintConverterDialog);
+  $("cancelPrintConverterBtn").addEventListener("click", closePrintConverterDialog);
+  $("printConverterDialog").addEventListener("click", (e) => {
+    if (e.target === $("printConverterDialog")) closePrintConverterDialog();
+  });
+
   $("openDxfBtn").addEventListener("click", () => {
     const input = $("dxfFile");
     input.value = "";
@@ -2362,6 +3046,7 @@
     state.projectDirty = true;
     updateProjectTitle();
     state.segments = parsed.segments;
+    state.labels = parsed.labels || [];
     state.detectedUnits = parsed.detectedUnits;
     state.calibration = { activePoint: null, points: [null, null], feetPerUnit: null };
     state.toolMode = "wall";
@@ -2379,7 +3064,7 @@
 
     $("emptyState").style.display = parsed.segments.length ? "none" : "flex";
     $("fileStatus").textContent = parsed.segments.length
-      ? `${file.name} — ${parsed.segments.length.toLocaleString()} selectable line segments${parsed.detectedUnits ? ` — units detected: ${parsed.detectedUnits}` : ""}`
+      ? `${file.name} — ${parsed.segments.length.toLocaleString()} selectable line segments${state.labels.length ? ` • ${state.labels.length.toLocaleString()} text labels` : ""}${parsed.detectedUnits ? ` — units detected: ${parsed.detectedUnits}` : ""}`
       : `${file.name} — no LINE/LWPOLYLINE/POLYLINE geometry found`;
 
     refreshTables();

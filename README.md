@@ -446,3 +446,39 @@ Workflow:
 The closed area is temporary and is not saved as a named project area.
 
 Version 2.9 TRACE LOCK behavior remains unchanged.
+
+
+## Version 2.15 — PDF Print → DXF + text/legends
+
+ATLAS Takeoff can now open architectural PDF prints directly through the **PRINT** button.
+
+### Workflow
+
+1. Tap **PRINT**.
+2. Choose a multi-page PDF from Files.
+3. Select the page number.
+4. Preview the page.
+5. Leave **Include text / legends** checked if you want labels carried into the DXF.
+6. Tap **CREATE DXF + LOAD**.
+
+ATLAS converts PDF vector linework to feet, loads it directly into the existing Takeoff viewer, and keeps the normal WALL / TRACE / ORTHO / AREA SELECT workflows.
+
+### DXF export
+
+The Print → DXF window also has **DOWNLOAD DXF**.
+
+Generated DXFs use:
+
+- `PDF_GEOMETRY` layer for linework
+- `PDF_TEXT` layer for extracted PDF text / legends
+- Drawing units = Feet
+
+The generated DXF can be reopened later with the regular **OPEN** button. ATLAS now reads DXF `TEXT` and `MTEXT` entities so legend labels remain visible in the viewer.
+
+### PDF notes
+
+This uses Mozilla PDF.js in the browser, following the same PDF-to-vector approach that worked in the earlier ATLAS PDF conversion prototype. The converter loads PDF.js from its browser CDN, so internet access is required when using PRINT.
+
+Vector/CAD PDFs work best. Scanned or image-only PDF pages can be previewed, but do not contain accurate vector geometry for automatic DXF creation.
+
+The stable Takeoff features from Version 2.14 are retained, including four-point temporary AREA totals, grouped Markups, ORTHO, project saving, and the Version 2.9 Trace Lock chain behavior.

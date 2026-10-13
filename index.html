@@ -15,7 +15,9 @@
     </div>
     <div class="top-actions compact-top-actions">
       <button id="openDxfBtn" class="button primary" type="button">OPEN</button>
+      <button id="openPrintBtn" class="button print-button" type="button">PRINT</button>
       <input id="dxfFile" type="file" hidden>
+      <input id="pdfPrintFile" type="file" accept="application/pdf,.pdf" hidden>
       <button id="wallModeBtn" class="button active-tool" type="button">WALL</button>
       <button id="traceWallsBtn" class="button" type="button">TRACE</button>
       <button id="traceLockBtn" class="button trace-lock-button" type="button" aria-pressed="false">LOCK</button>
@@ -97,7 +99,7 @@
       <div id="canvasWrap">
         <canvas id="dxfCanvas"></canvas>
         <div id="emptyState" class="empty-state">
-          <strong>Open a DXF drawing</strong>
+          <strong>Open a DXF or PDF print</strong>
           <span>Then tap a wall line to create a takeoff item.</span>
         </div>
       </div>
@@ -415,6 +417,63 @@
         <button id="saveWallTypeEditorBtn" class="button primary grow" type="button">Save Changes</button>
         <button id="deleteWallTypeEditorBtn" class="button danger" type="button">Delete Type</button>
         <button id="cancelWallTypeEditorBtn" class="button" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="printConverterDialog" class="project-modal hidden" role="dialog" aria-modal="true" aria-labelledby="printConverterTitle">
+    <div class="project-dialog-card print-converter-card">
+      <div class="panel-heading">
+        <h2 id="printConverterTitle">Print → DXF</h2>
+        <button id="closePrintConverterBtn" class="button" type="button">✕</button>
+      </div>
+
+      <div class="muted project-note">
+        Open a PDF print, choose a page, then convert its vector linework directly to ATLAS.
+        Text and legends can be carried into the DXF as a separate PDF_TEXT layer.
+      </div>
+
+      <div class="print-file-row">
+        <button id="choosePrintPdfBtn" class="button primary" type="button">Choose PDF Print</button>
+        <div id="printFileName" class="print-file-name">No PDF selected</div>
+      </div>
+
+      <div class="field-row print-page-row">
+        <label>Page
+          <input id="printPageNumber" type="number" min="1" step="1" value="1">
+        </label>
+        <div id="printPageCount" class="print-page-count muted">— pages</div>
+        <button id="previewPrintPageBtn" class="button" type="button" disabled>Preview Page</button>
+      </div>
+
+      <label class="editor-update-existing">
+        <input id="includePrintText" type="checkbox" checked>
+        Include text / legends in generated DXF
+      </label>
+
+      <label class="editor-update-existing">
+        <input id="skipTinyPrintLines" type="checkbox" checked>
+        Skip tiny PDF linework under 1/8"
+      </label>
+
+      <div class="print-preview-wrap">
+        <canvas id="printPreviewCanvas"></canvas>
+        <div id="printPreviewEmpty" class="print-preview-empty">
+          Choose a PDF print to preview a page.
+        </div>
+      </div>
+
+      <div id="printConvertStatus" class="project-storage-status muted" role="status" aria-live="polite"></div>
+
+      <div class="project-dialog-actions print-converter-actions">
+        <button id="convertLoadPrintBtn" class="button primary grow" type="button" disabled>CREATE DXF + LOAD</button>
+        <button id="downloadConvertedDxfBtn" class="button" type="button" disabled>DOWNLOAD DXF</button>
+        <button id="cancelPrintConverterBtn" class="button" type="button">Cancel</button>
+      </div>
+
+      <div class="print-converter-footnote">
+        Vector/CAD PDFs convert best. Scanned image-only sheets can be previewed, but accurate CAD linework cannot be reconstructed automatically.
       </div>
     </div>
   </div>

@@ -1345,3 +1345,111 @@ body.viewer-focus-active {
     font-size: 13px;
   }
 }
+
+
+/* V2.15 — PDF Print → DXF converter */
+.print-button {
+  border-color: rgba(129, 193, 255, .62) !important;
+  color: #b9ddff !important;
+}
+
+.print-converter-card {
+  width: min(980px, calc(100vw - 28px));
+  max-height: min(94vh, 900px);
+  overflow-y: auto;
+}
+
+.print-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.print-file-name {
+  min-width: 0;
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.print-page-row {
+  align-items: end;
+}
+
+.print-page-row label {
+  max-width: 130px;
+}
+
+.print-page-count {
+  min-width: 78px;
+  padding-bottom: 8px;
+}
+
+.print-preview-wrap {
+  position: relative;
+  min-height: 220px;
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0b0d10;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#printPreviewCanvas {
+  display: block;
+  max-width: none;
+  background: #fff;
+}
+
+.print-preview-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.print-converter-actions {
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
+  background: linear-gradient(to top, var(--panel) 72%, transparent);
+}
+
+.print-converter-footnote {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+  .print-converter-card {
+    width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+    padding: 10px;
+  }
+
+  .print-file-row,
+  .print-page-row {
+    flex-wrap: wrap;
+  }
+
+  .print-preview-wrap {
+    min-height: 180px;
+    max-height: 46vh;
+  }
+
+  .print-converter-actions .button {
+    min-height: 28px;
+    padding: 4px 7px;
+    font-size: 9px;
+  }
+}
